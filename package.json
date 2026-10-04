@@ -1,18 +1,55 @@
 {
-  "name": "discord-music-bot",
-  "version": "1.0.0",
-  "description": "A Discord bot that plays ad-free audio from YouTube / YouTube Music links",
-  "main": "src/index.js",
+  "name": "sruti",
+  "version": "2.0.0",
+  "description": "Sruti — Windows Desktop Application and Discord Music Bot Ecosystem",
+  "main": "desktop/main.cjs",
   "type": "module",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node bot.js",
+    "bot": "node bot.js",
+    "desktop": "electron desktop/main.cjs",
+    "gui": "electron desktop/main.cjs",
+    "build:exe": "electron-builder --win nsis portable",
+    "build:portable": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.srutimusic.app",
+    "productName": "Sruti",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "desktop/**/*",
+      "src/**/*",
+      "package.json",
+      ".env.example",
+      "!**/.env",
+      "!**/.env.*"
+    ],
+    "asarUnpack": [
+      "**/*.node",
+      "**/youtube-dl-exec/**",
+      "**/ffmpeg-static/**",
+      "**/@snazzah/**"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   },
   "license": "MIT",
   "dependencies": {
     "@discordjs/voice": "^0.19.2",
-    "express": "^4.19.2",
-    "cors": "^2.8.5",
     "@noble/ciphers": "^2.2.0",
+    "@snazzah/davey": "^0.1.12",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
     "ffmpeg-static": "^5.2.0",
@@ -20,5 +57,9 @@
     "opusscript": "^0.0.8",
     "play-dl": "^1.9.7",
     "youtube-dl-exec": "^3.1.7"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
   }
 }

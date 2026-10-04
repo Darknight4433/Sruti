@@ -7,22 +7,34 @@ import ffmpegPath from 'ffmpeg-static';
 
 const require = createRequire(import.meta.url);
 
-// Resolve yt-dlp: prefer bundled binary from youtube-dl-exec, fall back to system PATH.
-function resolveYtDlp() {
-  if (process.env.YT_DLP_PATH) return process.env.YT_DLP_PATH;
+function resolveYtDlpPath() {
   try {
     const pkgJson = require.resolve('youtube-dl-exec/package.json');
     const pkgDir = path.dirname(pkgJson);
     const binName = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
-    const bundled = path.join(pkgDir, 'bin', binName);
-    if (existsSync(bundled)) return bundled;
-  } catch { /* package not installed */ }
-  return 'yt-dlp'; // system PATH
+    let binPath = path.join(pkgDir, 'bin', binName);
+    if (binPath.includes('app.asar') && !binPath.includes('app.asar.unpacked')) {
+      const unpacked = binPath.replace('app.asar', 'app.asar.unpacked');
+      if (existsSync(unpacked)) return unpacked;
+    }
+    return binPath;
+  } catch {
+    return 'yt-dlp';
+  }
 }
 
-const YT_DLP = resolveYtDlp();
+function resolveFfmpegPath() {
+  let p = ffmpegPath;
+  if (p && typeof p === 'string' && p.includes('app.asar') && !p.includes('app.asar.unpacked')) {
+    const unpacked = p.replace('app.asar', 'app.asar.unpacked');
+    if (existsSync(unpacked)) return unpacked;
+  }
+  return p || 'ffmpeg';
+}
 
-import { getNextProxy, reportSuccess, reportFailure, PROXY_POOL } from './proxy.js';
+const YT_DLP = resolveYtDlpPath();
+
+import { getNextProxy, PROXY_POOL } from './proxy.js';
 
 const COOKIES_FILE = process.env.YT_COOKIES_FILE;
 const COOKIES_FROM_BROWSER = process.env.YT_COOKIES_FROM_BROWSER;
@@ -42,9 +54,6 @@ function authArgs(proxy) {
   } else if (COOKIES_FROM_BROWSER) {
     args.push('--cookies-from-browser', COOKIES_FROM_BROWSER);
   }
-  // Prefer player clients that are less likely to trigger the bot check.
-  // Using both ios and android/safari clients helps with compatibility.
-  args.push('--extractor-args', 'youtube:player_client=ios,android,web_safari');
   return args;
 }
 
@@ -70,11 +79,18 @@ function spawnYtDlp(videoUrl, proxy) {
  *
  * Rotates through the residential proxy pool automatically if a block is detected.
  */
-export async function createOpusStream(videoUrl, seekSeconds = 0) {
+export async function createOpusStream(videoUrl, seekSeconds = 0, options = {}) {
+  const { signal } = options;
   const maxAttempts = PROXY_POOL.length > 0 ? Math.min(5, PROXY_POOL.length) : 1;
   let lastError = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (signal?.aborted) {
+      const err = new Error('Playback aborted');
+      err.name = 'AbortError';
+      throw err;
+    }
+
     const proxy = getNextProxy();
     console.log(`[Stream] Attempt ${attempt}/${maxAttempts} for ${videoUrl} using proxy: ${proxy || 'Direct/None'}`);
 
@@ -85,10 +101,19 @@ export async function createOpusStream(videoUrl, seekSeconds = 0) {
     const cleanup = () => {
       if (cleanupCalled) return;
       cleanupCalled = true;
+      try {
+        if (ytdlp?.stdout) ytdlp.stdout.destroy();
+        if (ytdlp?.stderr) ytdlp.stderr.destroy();
+        if (ffmpeg?.stdin) ffmpeg.stdin.destroy();
+        if (ffmpeg?.stdout) ffmpeg.stdout.destroy();
+        if (ffmpeg?.stderr) ffmpeg.stderr.destroy();
+      } catch {
+        // ignore
+      }
       for (const proc of [ytdlp, ffmpeg]) {
         if (proc && !proc.killed) {
           try {
-            proc.kill('SIGKILL');
+            proc.kill();
           } catch {
             // ignore
           }
@@ -127,7 +152,7 @@ export async function createOpusStream(videoUrl, seekSeconds = 0) {
         'pipe:1',
       );
 
-      ffmpeg = spawn(ffmpegPath, ffmpegArgs, {
+      ffmpeg = spawn(resolveFfmpegPath(), ffmpegArgs, {
         windowsHide: true,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
@@ -141,8 +166,6 @@ export async function createOpusStream(videoUrl, seekSeconds = 0) {
       ffmpeg.on('close', (code) => {
         if (code && code !== 0 && code !== 255) {
           console.error(`FFmpeg exited with code ${code}:`, ffErr.trim().slice(-400));
-        } else {
-          console.log(`[Stream] FFmpeg closed cleanly (code ${code}) for ${videoUrl}`);
         }
       });
 
@@ -151,31 +174,53 @@ export async function createOpusStream(videoUrl, seekSeconds = 0) {
       // Ignore EPIPE when FFmpeg closes stdin early (e.g. on skip/stop).
       ffmpeg.stdin.on('error', () => {});
 
-      // When yt-dlp finishes downloading, close FFmpeg's stdin so it can
-      // flush remaining audio and exit cleanly (triggering AudioPlayer Idle).
-      ytdlp.on('close', () => {
-        if (ffmpeg.stdin && !ffmpeg.stdin.destroyed) {
-          ffmpeg.stdin.end();
-        }
-      });
-
       ffmpeg.stdout.on('close', cleanup);
 
       // Gate: only succeed once yt-dlp actually starts producing audio. If yt-dlp
       // exits before emitting any data (e.g. the bot check), reject with a clear
       // error instead of handing an empty stream to FFmpeg (which would spin).
+      // Also add timeout and abort listener so skipping or dead networks never freeze.
       await new Promise((resolve, reject) => {
         let settled = false;
+
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(new Error(`Stream connection timed out after 20s (Proxy: ${proxy || 'Direct/None'}).`));
+        }, 20_000);
+
+        const onAbort = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          cleanup();
+          const err = new Error('Playback aborted');
+          err.name = 'AbortError';
+          reject(err);
+        };
+
+        if (signal) {
+          if (signal.aborted) {
+            onAbort();
+            return;
+          }
+          signal.addEventListener('abort', onAbort, { once: true });
+        }
 
         const onData = () => {
           if (settled) return;
           settled = true;
+          clearTimeout(timer);
+          if (signal) signal.removeEventListener('abort', onAbort);
           resolve();
         };
 
         const onClose = () => {
           if (settled) return;
           settled = true;
+          clearTimeout(timer);
+          if (signal) signal.removeEventListener('abort', onAbort);
           cleanup();
           const msg = ytErr.trim();
           if (/not a bot|Sign in to confirm/i.test(msg)) {
@@ -198,14 +243,15 @@ export async function createOpusStream(videoUrl, seekSeconds = 0) {
         ytdlp.once('close', onClose);
       });
 
-      reportSuccess(proxy);
       return { stream: ffmpeg.stdout, cleanup };
 
     } catch (err) {
-      console.warn(`[Stream] Attempt ${attempt} failed with proxy ${proxy || 'Direct/None'}: ${err.message}`);
-      reportFailure(proxy);
-      lastError = err;
       cleanup();
+      if (err.name === 'AbortError' || signal?.aborted) {
+        throw err;
+      }
+      console.warn(`[Stream] Attempt ${attempt} failed with proxy ${proxy || 'Direct/None'}: ${err.message}`);
+      lastError = err;
 
       // If this is the last attempt, bubble up the error
       if (attempt === maxAttempts) {

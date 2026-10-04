@@ -53,7 +53,7 @@ export function buildPanelEmbed(state, { locked, lockHolderTag } = {}) {
 
   if (locked) {
     embed.setFooter({
-      text: `🔒 Locked by ${lockHolderTag ?? 'a priority user'} — only they can control playback.`,
+      text: `🎵 Controlled by ${lockHolderTag ?? 'someone'} — wait for their session to end.`,
     });
   }
 
@@ -66,6 +66,12 @@ export function buildPanelEmbed(state, { locked, lockHolderTag } = {}) {
  */
 export function buildPanelComponents({ paused = false, disabled = false, loopMode = 'off' } = {}) {
   const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('mc:prev')
+      .setEmoji('⏮️')
+      .setLabel('Prev')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled),
     new ButtonBuilder()
       .setCustomId('mc:back')
       .setEmoji('⏪')
@@ -104,9 +110,9 @@ export function buildPanelComponents({ paused = false, disabled = false, loopMod
       .setStyle(ButtonStyle.Danger)
       .setDisabled(disabled),
     new ButtonBuilder()
-      .setCustomId('mc:seek')
-      .setEmoji('⏱️')
-      .setLabel('Seek')
+      .setCustomId('mc:shuffle')
+      .setEmoji('🔀')
+      .setLabel('Shuffle')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(disabled),
     new ButtonBuilder()
@@ -116,10 +122,11 @@ export function buildPanelComponents({ paused = false, disabled = false, loopMod
       .setStyle(loopStyle)
       .setDisabled(disabled),
     new ButtonBuilder()
-      .setCustomId('mc:list')
-      .setEmoji('📜')
-      .setLabel('Songs')
-      .setStyle(ButtonStyle.Secondary),
+      .setCustomId('mc:seek')
+      .setEmoji('⏱️')
+      .setLabel('Seek')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled),
     new ButtonBuilder()
       .setCustomId('mc:refresh')
       .setEmoji('🔄')
@@ -130,44 +137,99 @@ export function buildPanelComponents({ paused = false, disabled = false, loopMod
   return [row1, row2];
 }
 
+export function buildStatusEmbed({ client, music, uptime = 0 }) {
+  const activeSessions = [...(music.states?.values() ?? [])].filter((s) => s.playing).length;
+  const totalQueued = [...(music.states?.values() ?? [])].reduce((acc, s) => acc + s.queue.length, 0);
+  const memMb = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
+
+  return new EmbedBuilder()
+    .setColor(0x00f5d4)
+    .setTitle('⚡ Sruti — System Status')
+    .setDescription('Real-time operational status for Sruti Ecosystem (Windows Desktop App + Discord).')
+    .addFields(
+      { name: '🟢 Bot Status', value: 'Online & Synchronized', inline: true },
+      { name: '⏱️ Uptime', value: formatTime(uptime), inline: true },
+      { name: '📶 Gateway Latency', value: `${Math.round(client?.ws?.ping ?? 0)} ms`, inline: true },
+      { name: '🌐 Servers', value: `${client?.guilds?.cache?.size ?? 0}`, inline: true },
+      { name: '🎙️ Active Voice Sessions', value: `${activeSessions}`, inline: true },
+      { name: '🎼 Total Queued Songs', value: `${totalQueued}`, inline: true },
+      { name: '💾 Memory Usage', value: `${memMb} MB`, inline: true },
+      { name: '⚙️ Music Backend', value: 'yt-dlp • FFmpeg • Opus', inline: true },
+      { name: '🚀 Version', value: 'v2.0.0 Sruti Edition', inline: true },
+    )
+    .setFooter({ text: 'Sruti Core • Windows App & Discord Bot' })
+    .setTimestamp();
+}
+
 /**
- * Build the "all songs" view: an embed listing the queue plus a button per
- * track (max 20) so the viewer can jump straight to one. Includes a button
- * to go back to the control panel.
+ * Build the queue view with a clean, easy-to-read layout.
+ * Shows: now playing (with progress), up next list with requester names and durations.
  */
 export function buildQueueView(state, { disabled = false } = {}) {
-  const embed = new EmbedBuilder().setColor(0x5865f2).setTitle('🎵 Songs in queue');
+  const embed = new EmbedBuilder().setColor(0x5865f2);
 
   if (!state || (!state.current && state.queue.length === 0)) {
-    embed.setDescription('The queue is empty. Use `/play` to add something.');
+    embed.setTitle('📭 Queue is empty');
+    embed.setDescription('Use `/play <song>` to add tracks.');
     return { embeds: [embed], components: [backRow()] };
   }
 
+  embed.setTitle('🎵 Music Queue');
+
   const lines = [];
+
+  // Now playing section
   if (state.current) {
-    lines.push(`**Now playing:** ${truncate(state.current.title)}`);
+    const pos = formatTime(state.getPosition());
+    const dur = formatTime(state.getDuration());
+    const paused = state.isPaused() ? ' ⏸️' : ' ▶️';
+    lines.push(`**Now Playing${paused}**`);
+    lines.push(`╔ ${truncate(state.current.title, 50)}`);
+    lines.push(`╚ \`${pos} / ${dur}\` • by **${state.current.requestedBy ?? 'unknown'}**`);
+    lines.push('');
   }
 
-  const max = Math.min(state.queue.length, 20);
-  for (let i = 0; i < max; i++) {
-    lines.push(`**${i + 1}.** ${truncate(state.queue[i].title)}`);
-  }
-  if (state.queue.length > max) {
-    lines.push(`…and ${state.queue.length - max} more`);
-  }
-  embed.setDescription(lines.join('\n') || 'Nothing queued.');
+  // Up next section
+  if (state.queue.length > 0) {
+    const max = Math.min(state.queue.length, 10);
+    let totalDuration = 0;
 
-  // Up to 20 jump buttons across 4 rows of 5.
+    lines.push(`**Up Next** (${state.queue.length} track${state.queue.length > 1 ? 's' : ''})`);
+    lines.push('───────────────────');
+
+    for (let i = 0; i < max; i++) {
+      const t = state.queue[i];
+      const dur = t.durationInSec ? formatTime(t.durationInSec) : '??:??';
+      totalDuration += t.durationInSec ?? 0;
+      lines.push(`\`${i + 1}.\` ${truncate(t.title, 40)} • \`${dur}\` • *${t.requestedBy ?? '?'}*`);
+    }
+
+    if (state.queue.length > max) {
+      lines.push(`\n*…and ${state.queue.length - max} more tracks*`);
+    }
+
+    lines.push('───────────────────');
+    lines.push(`⏱️ Total queue time: \`${formatTime(totalDuration)}\``);
+  } else {
+    lines.push('**Up Next:** Nothing — add more with `/play`');
+  }
+
+  embed.setDescription(lines.join('\n'));
+
+  // Jump buttons (max 10 shown, 2 rows of 5)
   const rows = [];
-  for (let i = 0; i < max; i++) {
-    if (i % 5 === 0) rows.push(new ActionRowBuilder());
-    rows[rows.length - 1].addComponents(
-      new ButtonBuilder()
-        .setCustomId(`mc:jump:${i}`)
-        .setLabel(String(i + 1))
-        .setStyle(ButtonStyle.Primary)
-        .setDisabled(disabled),
-    );
+  const max = Math.min(state.queue.length, 10);
+  if (max > 0) {
+    for (let i = 0; i < max; i++) {
+      if (i % 5 === 0) rows.push(new ActionRowBuilder());
+      rows[rows.length - 1].addComponents(
+        new ButtonBuilder()
+          .setCustomId(`mc:jump:${i}`)
+          .setLabel(`▶ ${i + 1}`)
+          .setStyle(ButtonStyle.Secondary)
+          .setDisabled(disabled),
+      );
+    }
   }
   rows.push(backRow());
   return { embeds: [embed], components: rows };
@@ -189,10 +251,84 @@ function truncate(text, len = 60) {
 }
 
 /**
- * Build the library view shown when `/play` is used with no query.
- * Shows a "Continue" button if there's a saved session, plus a numbered list
- * of recently played tracks with a replay button each (max 20).
+ * Build the Spotify import confirmation view.
+ * Shows playlist name, track count, and preview of songs with confirm/cancel buttons.
  */
+export function buildSpotifyImportView(playlistName, tracks) {
+  const embed = new EmbedBuilder().setColor(0x1DB954).setTitle(`🎵 Import from Spotify`);
+
+  const lines = [];
+  lines.push(`**${playlistName}** — ${tracks.length} track(s)\n`);
+
+  const max = Math.min(tracks.length, 15);
+  for (let i = 0; i < max; i++) {
+    const t = tracks[i];
+    const dur = t.durationInSec ? formatTime(t.durationInSec) : '??:??';
+    lines.push(`\`${i + 1}.\` ${truncate(t.title, 45)} • \`${dur}\``);
+  }
+  if (tracks.length > max) {
+    lines.push(`\n*…and ${tracks.length - max} more tracks*`);
+  }
+  lines.push(`\nThis will search YouTube for each track and add them to your library.`);
+
+  embed.setDescription(lines.join('\n'));
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('mc:spotifyconfirm')
+      .setEmoji('✅')
+      .setLabel(`Import ${tracks.length} tracks`)
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('mc:spotifycancel')
+      .setEmoji('❌')
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
+/**
+ * Build the per-user library view shown by `/lib`.
+ * Shows numbered songs and a "Play All" button.
+ */
+export function buildUserLibraryView(userLib, username) {
+  const embed = new EmbedBuilder().setColor(0x5865f2).setTitle(`📚 ${username}'s Library`);
+
+  if (!userLib || userLib.length === 0) {
+    embed.setDescription('Your library is empty.\nAdd songs with `/library add <song1>, <song2>, ...`\nOr import from Spotify with `/library import <url>`');
+    return { embeds: [embed], components: [] };
+  }
+
+  const lines = [];
+  lines.push(`**${userLib.length} song(s)** in your library:\n`);
+  const max = Math.min(userLib.length, 25);
+  for (let i = 0; i < max; i++) {
+    const t = userLib[i];
+    const dur = t.durationInSec ? formatTime(t.durationInSec) : '??:??';
+    lines.push(`\`${i + 1}.\` ${truncate(t.title, 45)} • \`${dur}\``);
+  }
+  if (userLib.length > max) {
+    lines.push(`\n*…and ${userLib.length - max} more*`);
+  }
+  lines.push(`\n\`/library add <songs>\` to add • \`/library remove <number>\` to remove\n\`/library import <spotify-url>\` to import from Spotify`);
+
+  embed.setDescription(lines.join('\n'));
+
+  const rows = [];
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('mc:playlib')
+        .setEmoji('▶️')
+        .setLabel('Play All')
+        .setStyle(ButtonStyle.Success),
+    ),
+  );
+
+  return { embeds: [embed], components: rows };
+}
 export function buildLibraryView(session, history) {
   const embed = new EmbedBuilder().setColor(0x5865f2).setTitle('🎶 Your music library');
 

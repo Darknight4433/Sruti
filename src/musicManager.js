@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import {
   joinVoiceChannel,
   createAudioPlayer,
@@ -9,44 +10,48 @@ import {
 } from '@discordjs/voice';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { createOpusStream } from './stream.js';
 import { store } from './store.js';
-import { getNextProxy, reportSuccess, reportFailure, PROXY_POOL } from './proxy.js';
+import { getNextProxy, PROXY_POOL } from './proxy.js';
 
 const execFileAsync = promisify(execFile);
 const require = createRequire(import.meta.url);
 
-// Resolve yt-dlp: prefer bundled binary from youtube-dl-exec, fall back to system PATH.
-function resolveYtDlp() {
-  if (process.env.YT_DLP_PATH) return process.env.YT_DLP_PATH;
+function resolveYtDlpPath() {
   try {
     const pkgJson = require.resolve('youtube-dl-exec/package.json');
     const pkgDir = path.dirname(pkgJson);
     const binName = process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp';
-    const bundled = path.join(pkgDir, 'bin', binName);
-    if (existsSync(bundled)) return bundled;
-  } catch { /* package not installed */ }
-  return 'yt-dlp'; // system PATH
+    let binPath = path.join(pkgDir, 'bin', binName);
+    if (binPath.includes('app.asar') && !binPath.includes('app.asar.unpacked')) {
+      const unpacked = binPath.replace('app.asar', 'app.asar.unpacked');
+      if (existsSync(unpacked)) return unpacked;
+    }
+    return binPath;
+  } catch {
+    return 'yt-dlp';
+  }
 }
 
-const YT_DLP = resolveYtDlp();
+const YT_DLP = resolveYtDlpPath();
 const COOKIES_FILE = process.env.YT_COOKIES_FILE;
 
 function baseArgs(proxy) {
   const args = [];
   if (proxy) args.push('--proxy', proxy);
   if (COOKIES_FILE && existsSync(COOKIES_FILE)) args.push('--cookies', COOKIES_FILE);
-  args.push('--extractor-args', 'youtube:player_client=ios,android,web_safari');
+  // Let yt-dlp use the default player client — restricting to ios/android
+  // causes "Requested format is not available" on some videos.
   return args;
 }
 
 /**
- * Run yt-dlp with JSON output and return parsed result(s).
- * Retries automatically using the proxy pool if it fails.
+ * faaaaah Run yt-dlpp with JSON output and return parsed result(s).
+ * Retries automatically using the proxy pool if it fails and if fails hit vig's head.
  */
 async function ytDlpJson(args) {
   const maxAttempts = PROXY_POOL.length > 0 ? Math.min(5, PROXY_POOL.length) : 1;
@@ -64,11 +69,9 @@ async function ytDlpJson(args) {
       ], { windowsHide: true, maxBuffer: 10 * 1024 * 1024 });
       
       const lines = stdout.trim().split('\n').filter(Boolean);
-      reportSuccess(proxy);
       return lines.map((l) => JSON.parse(l));
     } catch (err) {
       console.warn(`[ytDlpJson] Attempt ${attempt}/${maxAttempts} failed using proxy ${proxy || 'Direct/None'}: ${err.message}`);
-      reportFailure(proxy);
       lastError = err;
       
       if (attempt === maxAttempts) {
@@ -94,11 +97,9 @@ async function ytDlpPlaylist(url) {
       ], { windowsHide: true, maxBuffer: 50 * 1024 * 1024 });
       
       const lines = stdout.trim().split('\n').filter(Boolean);
-      reportSuccess(proxy);
       return lines.map((l) => JSON.parse(l));
     } catch (err) {
       console.warn(`[ytDlpPlaylist] Attempt ${attempt}/${maxAttempts} failed using proxy ${proxy || 'Direct/None'}: ${err.message}`);
-      reportFailure(proxy);
       lastError = err;
       
       if (attempt === maxAttempts) {
@@ -109,54 +110,25 @@ async function ytDlpPlaylist(url) {
 }
 
 /**
- * Resolve a YouTube playlist URL into full metadata for the desktop app's
- * playlist import feature.
- * Returns { playlistId, title, thumbnail, tracks: [{ title, artist, channel, durationSec, url, thumbnail }] }.
- */
-export async function resolvePlaylistMeta(url) {
-  const entries = await ytDlpPlaylist(url);
-  if (!entries || entries.length === 0) {
-    throw new Error('Playlist is empty or could not be resolved.');
-  }
-
-  // Extract playlistId from URL
-  const listMatch = url.match(/[?&]list=([^&]+)/);
-  const playlistId = listMatch ? listMatch[1] : entries[0]?.playlist_id || 'unknown';
-
-  const playlistTitle = entries[0]?.playlist_title || 'Unknown Playlist';
-
-  // Use the first entry's thumbnail as the playlist thumbnail
-  const playlistThumbnail = entries[0]?.thumbnails?.length
-    ? entries[0].thumbnails[entries[0].thumbnails.length - 1].url
-    : null;
-
-  const tracks = entries.map((e) => ({
-    title: e.title || 'Unknown',
-    artist: e.channel || e.uploader || '',
-    channel: e.channel || e.uploader || '',
-    durationSec: e.duration ?? 0,
-    url: e.url || (e.id ? `https://www.youtube.com/watch?v=${e.id}` : ''),
-    thumbnail: e.thumbnails?.length
-      ? e.thumbnails[e.thumbnails.length - 1].url
-      : (e.id ? `https://img.youtube.com/vi/${e.id}/mqdefault.jpg` : null),
-  }));
-
-  return { playlistId, title: playlistTitle, thumbnail: playlistThumbnail, tracks };
-}
-
-/**
- * Resolve a YouTube / YouTube Music URL or search term into one or more tracks.
- * Uses yt-dlp for all lookups so everything goes through the proxy.
- * Returns { tracks: [{ url, title, durationInSec }], label }.
+ * Resolve a YouTube / YouTube Music URL or search term into a track.
+ * Strictly guarantees that searching or picking a single song only resolves THAT single song.
  */
 export async function resolveTracks(query, requestedBy) {
-  const isPlaylist = /[?&]list=/.test(query);
+  const trimmed = (query || '').trim();
+  return resolveSingle(trimmed, requestedBy);
+}
 
-  if (isPlaylist) {
+async function resolveSingle(query, requestedBy) {
+  // Only treat as a playlist if it's explicitly a dedicated playlist URL (contains list= without a specific video watch ID)
+  const isPurePlaylist = /[?&]list=/.test(query) && !query.includes('watch?v=') && !query.includes('youtu.be/');
+
+  if (isPurePlaylist) {
     const entries = await ytDlpPlaylist(query);
     const tracks = entries.map((e) => ({
       url: e.url || `https://www.youtube.com/watch?v=${e.id}`,
       title: e.title || 'Unknown',
+      artist: e.uploader || e.channel || 'YouTube',
+      thumbnail: e.thumbnail || (e.id ? `https://i.ytimg.com/vi/${e.id}/hqdefault.jpg` : null),
       durationInSec: e.duration ?? 0,
       requestedBy,
     }));
@@ -164,9 +136,16 @@ export async function resolveTracks(query, requestedBy) {
     return { tracks, label: `${tracks.length} tracks from playlist "${playlistTitle}"` };
   }
 
-  // If it looks like a URL, get info directly. Otherwise search.
-  const isUrl = /^https?:\/\//.test(query);
-  const args = isUrl ? [query] : [`ytsearch1:${query}`];
+  // Strip any extraneous &list= mix/radio tracking parameter from single video URLs (e.g. YouTube mix RD...)
+  let targetQuery = query;
+  if (/^https?:\/\//.test(targetQuery) && (targetQuery.includes('watch?v=') || targetQuery.includes('youtu.be/'))) {
+    targetQuery = targetQuery.replace(/([?&])list=[^&]+(&|$)/, '$1').replace(/[?&]$/, '');
+  }
+
+  const isUrl = /^https?:\/\//.test(targetQuery);
+  const isSearchPrefix = /^[a-z]+search\d*:/i.test(targetQuery);
+  // Strictly enforce --no-playlist so yt-dlp only extracts exactly 1 track
+  const args = ['--no-playlist', (isUrl || isSearchPrefix) ? targetQuery : `ytsearch1:${targetQuery}`];
 
   const results = await ytDlpJson(args);
   if (!results.length) throw new Error('No results found for that query.');
@@ -174,8 +153,10 @@ export async function resolveTracks(query, requestedBy) {
   const v = results[0];
   return {
     tracks: [{
-      url: v.webpage_url || v.url || query,
+      url: v.webpage_url || v.url || targetQuery,
       title: v.title || 'Unknown',
+      artist: v.uploader || v.channel || v.artist || 'YouTube',
+      thumbnail: v.thumbnail || (v.thumbnails && v.thumbnails[0]?.url) || (v.id ? `https://i.ytimg.com/vi/${v.id}/hqdefault.jpg` : null),
       durationInSec: v.duration ?? 0,
       requestedBy,
     }],
@@ -187,22 +168,26 @@ export async function resolveTracks(query, requestedBy) {
  * Holds the playback state for a single guild (server).
  */
 class GuildMusicState {
-  constructor(guildId) {
+  constructor(guildId, manager = null) {
     this.guildId = guildId;
+    this.manager = manager;
     this.queue = []; // upcoming tracks
     this.connection = null;
     this.player = createAudioPlayer();
     this.textChannel = null;
     this.voiceChannelId = null;
     this.playing = false;
+    this.previousStack = [];
+    this.volume = 1.0;
+    this.isShuffled = false;
 
-    // The user who last started playback (used to DM them privately when the
-    // queue finishes, instead of posting a public message).
+    // The user who last started playback
     this.starterUser = null;
 
-    // Currently playing track + the audio resource (used to read playback position).
+    // Currently playing track + the audio resource
     this.current = null;
     this.resource = null;
+    this.lastActivity = Date.now();
 
     // Cleanup function for the active FFmpeg/yt-dlp process, if any.
     this.cleanupStream = null;
@@ -213,44 +198,94 @@ class GuildMusicState {
     // Loop mode: 'off' | 'track' | 'queue'.
     this.loopMode = 'off';
 
-    // Priority lock: the user ID that currently holds exclusive control, or null.
-    this.lockHolderId = null;
+    // Abort controller and transition locks to prevent race conditions during rapid play/skip
+    this.activeAbortController = null;
+    this.isTransitioning = false;
+    this.isAdvancing = false;
+    this.playId = 0;
 
     this.player.on(AudioPlayerStatus.Idle, () => {
-      // A manual seek/jump replaces the resource without finishing the track,
-      // so we guard against that case using the `seeking` flag.
-      if (this.seeking) {
-        this.seeking = false;
+      if (this.isTransitioning) {
         return;
       }
-      console.log(`[player ${this.guildId}] Track ended, advancing to next...`);
-      this.advance().catch((err) => console.error(`[player ${this.guildId}] advance error:`, err));
+      this.advance().catch((err) => console.error('advance error:', err));
     });
 
     this.player.on('stateChange', (oldState, newState) => {
       if (oldState.status !== newState.status) {
         console.log(`[player ${this.guildId}] ${oldState.status} -> ${newState.status}`);
+        this.emitChange();
       }
     });
 
     this.player.on('error', (error) => {
       console.error('Audio player error:', error.message);
+      if (this.isTransitioning) {
+        return;
+      }
       this.advance().catch((err) => console.error('advance error:', err));
     });
   }
 
+  emitChange() {
+    if (this.manager) {
+      try {
+        this.manager.emit('change', this.guildId, this);
+      } catch (err) {
+        console.warn('emitChange error:', err.message);
+      }
+    }
+  }
+
+  isConnected() {
+    return Boolean(
+      this.connection &&
+      this.connection.state?.status !== VoiceConnectionStatus.Destroyed &&
+      this.connection.state?.status !== VoiceConnectionStatus.Disconnected
+    );
+  }
+
+  isReady() {
+    return Boolean(
+      this.connection &&
+      this.connection.state?.status === VoiceConnectionStatus.Ready
+    );
+  }
+
   connect(voiceChannel) {
+    if (this.connection) {
+      if (
+        this.voiceChannelId === voiceChannel.id &&
+        this.connection.state?.status === VoiceConnectionStatus.Ready
+      ) {
+        return this.connection;
+      }
+      try {
+        this.connection.destroy();
+      } catch {}
+      this.connection = null;
+    }
+
     this.voiceChannelId = voiceChannel.id;
+    this.lastActivity = Date.now();
     this.connection = joinVoiceChannel({
       channelId: voiceChannel.id,
       guildId: voiceChannel.guild.id,
       adapterCreator: voiceChannel.guild.voiceAdapterCreator,
+      selfDeaf: true,
+      selfMute: false,
     });
     this.connection.subscribe(this.player);
 
     this.connection.on('stateChange', (oldState, newState) => {
       if (oldState.status !== newState.status) {
         console.log(`[voice ${this.guildId}] ${oldState.status} -> ${newState.status}`);
+        if (newState.status === VoiceConnectionStatus.Ready && this.playing) {
+          if (this.player.state.status === AudioPlayerStatus.AutoPaused || this.player.state.status === AudioPlayerStatus.Paused) {
+            console.log(`[voice ${this.guildId}] Connection is ready, unpausing audio player...`);
+            this.player.unpause();
+          }
+        }
       }
     });
 
@@ -261,9 +296,19 @@ class GuildMusicState {
           entersState(this.connection, VoiceConnectionStatus.Connecting, 5_000),
         ]);
       } catch {
+        try { this.connection?.destroy(); } catch {}
+        this.connection = null;
+        this.voiceChannelId = null;
         this.destroy();
       }
     });
+
+    this.connection.on(VoiceConnectionStatus.Destroyed, () => {
+      this.connection = null;
+      this.voiceChannelId = null;
+    });
+
+    return this.connection;
   }
 
   /**
@@ -276,6 +321,9 @@ class GuildMusicState {
     try {
       await entersState(this.connection, VoiceConnectionStatus.Ready, timeoutMs);
     } catch {
+      try { this.connection?.destroy(); } catch {}
+      this.connection = null;
+      this.voiceChannelId = null;
       throw new Error(
         'Could not establish the voice connection (UDP handshake failed). ' +
           'This is usually caused by a firewall, VPN, or network blocking Discord voice (UDP). ' +
@@ -285,7 +333,15 @@ class GuildMusicState {
   }
 
   enqueue(tracks) {
-    this.queue.push(...tracks);
+    this.lastActivity = Date.now();
+    for (const track of tracks) {
+      const lastInQueue = this.queue[this.queue.length - 1];
+      if (lastInQueue && lastInQueue.url === track.url) {
+        continue;
+      }
+      this.queue.push(track);
+    }
+    this.emitChange();
   }
 
   async start() {
@@ -299,63 +355,162 @@ class GuildMusicState {
    * Stream a track starting at `seekSeconds` and play it.
    */
   async streamAndPlay(track, seekSeconds = 0) {
-    // Kill any previous stream process before starting a new one.
+    this.isTransitioning = true;
+
+    // Abort any prior in-flight stream setup
+    if (this.activeAbortController) {
+      this.activeAbortController.abort();
+      this.activeAbortController = null;
+    }
+
+    // Kill any existing stream processes
     if (this.cleanupStream) {
-      this.cleanupStream();
+      try { this.cleanupStream(); } catch {}
       this.cleanupStream = null;
     }
 
-    // yt-dlp extracts the clean audio stream directly from YouTube (no video
-    // ads), and FFmpeg encodes it to Ogg/Opus. Discord plays Opus natively,
-    // so we skip the lossy PCM -> opusscript re-encode for better quality.
-    const { stream, cleanup } = await createOpusStream(track.url, seekSeconds);
-    this.cleanupStream = cleanup;
+    try { this.player.stop(true); } catch {}
 
-    const resource = createAudioResource(stream, { inputType: StreamType.OggOpus });
+    const abortController = new AbortController();
+    this.activeAbortController = abortController;
 
-    this.resource = resource;
-    this.seekOffset = seekSeconds;
-    this.player.play(resource);
+    try {
+      const { stream, cleanup } = await createOpusStream(track.url, seekSeconds, {
+        signal: abortController.signal,
+      });
+
+      if (abortController.signal.aborted) {
+        cleanup();
+        return;
+      }
+
+      this.cleanupStream = cleanup;
+
+      const resource = createAudioResource(stream, { inputType: StreamType.OggOpus, inlineVolume: true });
+      if (resource.volume) {
+        resource.volume.setVolume(this.volume);
+      }
+
+      this.resource = resource;
+      this.seekOffset = seekSeconds;
+      this.player.play(resource);
+
+      const onPlaying = () => {
+        this.isTransitioning = false;
+        this.player.off(AudioPlayerStatus.Playing, onPlaying);
+      };
+      this.player.once(AudioPlayerStatus.Playing, onPlaying);
+
+      setTimeout(() => {
+        this.isTransitioning = false;
+        this.player.off(AudioPlayerStatus.Playing, onPlaying);
+      }, 1500);
+    } catch (err) {
+      this.isTransitioning = false;
+      throw err;
+    }
+  }
+
+  async notifyNowPlaying(track) {
+    if (!track) return;
+    try {
+      const guild = this.manager?.client?.guilds.cache.get(this.guildId);
+      if (!guild) return;
+
+      const requester = track.requestedBy ?? 'Sruti Commander';
+      const dur = track.durationInSec ? ` • ⏱️ \`${Math.floor(track.durationInSec / 60)}:${String(Math.floor(track.durationInSec % 60)).padStart(2, '0')}\`` : '';
+      const titleLink = track.url ? `[**${track.title}**](${track.url})` : `**${track.title}**`;
+
+      const targets = new Set();
+
+      // 1. Send inside the Voice Channel's text chat where users are listening
+      if (this.voiceChannelId) {
+        const vc = guild.channels.cache.get(this.voiceChannelId);
+        if (vc && typeof vc.send === 'function') {
+          targets.add(vc);
+        }
+      }
+
+      // 2. Also send in the bound text channel (or server default text channel)
+      if (this.textChannel && typeof this.textChannel.send === 'function') {
+        targets.add(this.textChannel);
+      } else if (targets.size === 0) {
+        const fallback = guild.systemChannel || guild.channels.cache.find((c) => c.isTextBased && c.isTextBased() && !c.isVoiceBased() && c.permissionsFor(guild.members.me)?.has('SendMessages'));
+        if (fallback && typeof fallback.send === 'function') {
+          targets.add(fallback);
+        }
+      }
+
+      const content = `🎶 **Now Playing:** ${titleLink}${dur}\n*Requested by ${requester}*`;
+
+      for (const target of targets) {
+        target.send(content).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('notifyNowPlaying error:', err.message);
+    }
   }
 
   async playNext() {
+    const currentPlayId = ++this.playId;
     const track = this.queue.shift();
     if (!track) {
       this.playing = false;
       this.current = null;
       this.resource = null;
+      if (this.activeAbortController) {
+        this.activeAbortController.abort();
+        this.activeAbortController = null;
+      }
       if (this.cleanupStream) {
         this.cleanupStream();
         this.cleanupStream = null;
       }
       this.lockHolderId = null;
-      console.log(`[player ${this.guildId}] Queue empty, playback ended.`);
+      this.emitChange();
+      // Notify that the queue is empty.
+      if (this.textChannel) {
+        this.textChannel.send('📭 Queue finished — no more tracks to play.').catch(() => {});
+      }
       return;
+    }
+
+    if (this.current) {
+      this.previousStack.unshift(this.current);
+      if (this.previousStack.length > 20) this.previousStack.pop();
     }
 
     this.current = track;
     this.playing = true;
-    console.log(`[player ${this.guildId}] Now playing: "${track.title}"`);
+    this.lastActivity = Date.now();
+    this.emitChange();
     // Record this track in the guild's history and persist the session.
     store.addHistory(this.guildId, track);
 
     try {
       await this.streamAndPlay(track, 0);
+      if (this.playId !== currentPlayId) return;
+
       this.failStreak = 0;
       this.persistSession();
+
+      // Send Now Playing notification into voice channel chat and server channel
+      await this.notifyNowPlaying(track);
     } catch (err) {
+      if (this.playId !== currentPlayId || err.name === 'AbortError' || err.message?.includes('aborted')) {
+        return;
+      }
+
       // Extraction failed (e.g. bot check, deleted/age-restricted video).
       this.failStreak = (this.failStreak ?? 0) + 1;
-      console.error(`[player ${this.guildId}] Failed to play "${track.title}": ${err.message}`);
+      console.error(`Failed to play "${track.title}": ${err.message}`);
 
-      // A bot check fails every track, so don't churn the whole queue —
-      // stop after a few consecutive failures and report it.
+      // Stop after consecutive failures or empty queue
       if (this.failStreak >= 3 || this.queue.length === 0) {
         this.stop();
         throw err;
       }
       // Otherwise skip this track and try the next one.
-      console.log(`[player ${this.guildId}] Skipping to next track...`);
       await this.playNext();
     }
   }
@@ -385,20 +540,26 @@ class GuildMusicState {
   }
 
   /**
-   * Called when a track finishes naturally. Honors the loop mode:
+   * Called when a track finishes naturally or is skipped. Honors the loop mode:
    * - 'track': replay the current track.
    * - 'queue': push the finished track to the back, then play the next.
    * - 'off':   just play the next track.
    */
   async advance() {
-    if (this.loopMode === 'track' && this.current) {
-      await this.streamAndPlay(this.current, 0);
-      return;
+    if (this.isAdvancing) return;
+    this.isAdvancing = true;
+    try {
+      if (this.loopMode === 'track' && this.current) {
+        await this.streamAndPlay(this.current, 0);
+        return;
+      }
+      if (this.loopMode === 'queue' && this.current) {
+        this.queue.push(this.current);
+      }
+      await this.playNext();
+    } finally {
+      this.isAdvancing = false;
     }
-    if (this.loopMode === 'queue' && this.current) {
-      this.queue.push(this.current);
-    }
-    await this.playNext();
   }
 
   /**
@@ -417,10 +578,7 @@ class GuildMusicState {
       throw new Error('That track is no longer in the queue.');
     }
     const [track] = this.queue.splice(index, 1);
-    this.current = track;
-    this.playing = true;
-    this.seeking = true; // replacing the resource shouldn't trigger auto-advance
-    await this.streamAndPlay(track, 0);
+    await this.playTrackNow(track);
     return track;
   }
 
@@ -441,24 +599,94 @@ class GuildMusicState {
    */
   async seek(seconds) {
     if (!this.current) throw new Error('Nothing is playing.');
+    this.lastActivity = Date.now();
     const duration = this.getDuration();
     let target = Math.max(0, Math.floor(seconds));
     if (duration && target >= duration) target = Math.max(0, duration - 1);
 
-    this.seeking = true; // prevent the Idle handler from advancing the queue
+    if (this.activeAbortController) {
+      this.activeAbortController.abort();
+      this.activeAbortController = null;
+    }
+    if (this.cleanupStream) {
+      this.cleanupStream();
+      this.cleanupStream = null;
+    }
     await this.streamAndPlay(this.current, target);
     return target;
   }
 
-  skip() {
-    this.player.stop(true);
+  async skip() {
+    this.lastActivity = Date.now();
+    this.isTransitioning = true;
+    if (this.activeAbortController) {
+      this.activeAbortController.abort();
+      this.activeAbortController = null;
+    }
+    if (this.cleanupStream) {
+      try { this.cleanupStream(); } catch {}
+      this.cleanupStream = null;
+    }
+    try { this.player.stop(true); } catch {}
+    await this.advance();
+  }
+
+  async previous() {
+    this.isTransitioning = true;
+    if (this.activeAbortController) {
+      this.activeAbortController.abort();
+      this.activeAbortController = null;
+    }
+    if (this.cleanupStream) {
+      try { this.cleanupStream(); } catch {}
+      this.cleanupStream = null;
+    }
+    const pos = this.getPosition();
+    if (pos > 5 || this.previousStack.length === 0) {
+      if (this.current) {
+        await this.seek(0);
+        return this.current;
+      }
+      return null;
+    }
+    const prev = this.previousStack.shift();
+    if (!prev) return null;
+    if (this.current) {
+      this.queue.unshift(this.current);
+    }
+    await this.playTrackNow(prev);
+    return prev;
+  }
+
+  shuffle() {
+    for (let i = this.queue.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [this.queue[i], this.queue[j]] = [this.queue[j], this.queue[i]];
+    }
+    return this.queue;
+  }
+
+  removeAt(index) {
+    if (index < 0 || index >= this.queue.length) return null;
+    const [removed] = this.queue.splice(index, 1);
+    return removed;
+  }
+
+  setVolume(vol) {
+    this.volume = Math.max(0, Math.min(2.0, vol));
+    if (this.resource?.volume) {
+      this.resource.volume.setVolume(this.volume);
+    }
+    return this.volume;
   }
 
   pause() {
+    this.lastActivity = Date.now();
     return this.player.pause();
   }
 
   resume() {
+    this.lastActivity = Date.now();
     return this.player.unpause();
   }
 
@@ -467,6 +695,7 @@ class GuildMusicState {
   }
 
   stop() {
+    this.lastActivity = Date.now();
     // Capture the session (track + position + queue) before clearing, so the
     // user can "continue" from where they stopped later.
     if (this.current) {
@@ -485,18 +714,25 @@ class GuildMusicState {
       });
     }
 
-    this.queue = [];
-    this.seeking = false;
-    this.loopMode = 'off';
-    this.player.stop(true);
+    if (this.activeAbortController) {
+      this.activeAbortController.abort();
+      this.activeAbortController = null;
+    }
     if (this.cleanupStream) {
       this.cleanupStream();
       this.cleanupStream = null;
     }
+
+    this.queue = [];
+    this.isTransitioning = false;
+    this.isAdvancing = false;
+    this.loopMode = 'off';
+    this.player.stop(true);
     this.playing = false;
     this.current = null;
     this.resource = null;
     this.lockHolderId = null;
+    this.emitChange();
   }
 
   /**
@@ -507,10 +743,16 @@ class GuildMusicState {
     if (!session?.track) throw new Error('No saved session to continue.');
     await this.waitUntilReady();
 
+    if (this.activeAbortController) {
+      this.activeAbortController.abort();
+      this.activeAbortController = null;
+    }
+    if (this.cleanupStream) {
+      this.cleanupStream();
+      this.cleanupStream = null;
+    }
+
     this.queue = (session.queue ?? []).map((t) => ({ ...t }));
-    // Only guard against the replaced-resource Idle event if something is
-    // already playing; when starting from idle no such event fires.
-    if (this.current) this.seeking = true;
     this.current = { ...session.track };
     this.playing = true;
     store.addHistory(this.guildId, this.current);
@@ -524,14 +766,63 @@ class GuildMusicState {
    * Play a single track immediately (used by the library "replay" buttons),
    * keeping any existing queue intact.
    */
+  /**
+   * Play a single track immediately (e.g. user clicked Play),
+   * smoothly interrupting any current audio without race conditions or duplicates.
+   */
   async playTrackNow(track) {
     await this.waitUntilReady();
-    if (this.current) this.seeking = true;
+
+    const currentPlayId = ++this.playId;
+    this.isTransitioning = true;
+
+    if (this.activeAbortController) {
+      this.activeAbortController.abort();
+      this.activeAbortController = null;
+    }
+    if (this.cleanupStream) {
+      try { this.cleanupStream(); } catch {}
+      this.cleanupStream = null;
+    }
+    try { this.player.stop(true); } catch {}
+
+    if (this.current && this.current.url !== track.url) {
+      this.previousStack.unshift(this.current);
+      if (this.previousStack.length > 20) this.previousStack.pop();
+    }
+
+    // Remove any duplicate instances of this track from the queue
+    this.queue = this.queue.filter((t) => t.url !== track.url);
+
     this.current = { ...track };
     this.playing = true;
+    this.lastActivity = Date.now();
+    this.emitChange();
     store.addHistory(this.guildId, this.current);
-    await this.streamAndPlay(this.current, 0);
-    this.persistSession();
+
+    try {
+      await this.streamAndPlay(this.current, 0);
+      if (this.playId !== currentPlayId) return;
+
+      this.failStreak = 0;
+      this.persistSession();
+
+      // Send Now Playing notification into voice channel chat and server channel
+      await this.notifyNowPlaying(this.current);
+    } catch (err) {
+      if (this.playId !== currentPlayId || err.name === 'AbortError' || err.message?.includes('aborted')) {
+        return;
+      }
+
+      this.failStreak = (this.failStreak ?? 0) + 1;
+      console.error(`Failed to play "${track.title}": ${err.message}`);
+
+      if (this.failStreak >= 3 || this.queue.length === 0) {
+        this.stop();
+        throw err;
+      }
+      await this.playNext();
+    }
   }
 
   destroy() {
@@ -551,14 +842,15 @@ class GuildMusicState {
 /**
  * Tracks one GuildMusicState per guild.
  */
-export class MusicManager {
+export class MusicManager extends EventEmitter {
   constructor() {
+    super();
     this.states = new Map();
   }
 
   get(guildId) {
     if (!this.states.has(guildId)) {
-      this.states.set(guildId, new GuildMusicState(guildId));
+      this.states.set(guildId, new GuildMusicState(guildId, this));
     }
     return this.states.get(guildId);
   }
@@ -572,6 +864,7 @@ export class MusicManager {
     if (state) {
       state.destroy();
       this.states.delete(guildId);
+      this.emit('change', guildId, null);
     }
   }
 }

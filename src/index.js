@@ -8,22 +8,32 @@ import {
   REST,
   Routes,
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
+  ActivityType,
 } from 'discord.js';
 import { MusicManager, resolveTracks } from './musicManager.js';
-import { buildPanelEmbed, buildPanelComponents, buildQueueView, buildLibraryView, formatTime } from './ui.js';
+import { fetchSpotifyPlaylist } from './spotify.js';
+import { buildPanelEmbed, buildPanelComponents, buildQueueView, buildLibraryView, buildUserLibraryView, buildSpotifyImportView, buildStatusEmbed, formatTime } from './ui.js';
 import { store } from './store.js';
-import { startApiServer } from './api.js';
+import { scifyCore } from './scifyCore.js';
+import { getDefaultToken } from './vault.js';
 
-const TOKEN = process.env.DISCORD_TOKEN;
+const TOKEN = (process.env.DISCORD_TOKEN && process.env.DISCORD_TOKEN !== 'your-bot-token-here' && process.env.DISCORD_TOKEN.length > 20)
+  ? process.env.DISCORD_TOKEN
+  : getDefaultToken();
+
 const ACCESS_ROLE_ID = process.env.ACCESS_ROLE_ID;
 const PRIORITY_ROLE_ID = process.env.PRIORITY_ROLE_ID;
 
-if (!TOKEN || TOKEN === 'your-bot-token-here') {
-  console.error('Missing DISCORD_TOKEN. Set it in your .env file.');
-  process.exit(1);
+if (!TOKEN) {
+  console.error('Missing DISCORD_TOKEN.');
+  if (!process.versions.electron) {
+    process.exit(1);
+  }
 }
 if (!ACCESS_ROLE_ID) console.warn('ACCESS_ROLE_ID is not set — everyone will be allowed to use the bot.');
 if (!PRIORITY_ROLE_ID) console.warn('PRIORITY_ROLE_ID is not set — the priority lock is disabled.');
@@ -37,10 +47,14 @@ const client = new Client({
 });
 
 const music = new MusicManager();
+music.client = client;
+scifyCore.attachDiscord({ client, music });
 
 // ---------- Permission helpers ----------
 
 function hasAccess(member) {
+  // Server owner always has access.
+  if (member.id === member.guild.ownerId) return true;
   if (!ACCESS_ROLE_ID) return true;
   return member.roles.cache.has(ACCESS_ROLE_ID);
 }
@@ -52,21 +66,13 @@ function isPriority(member) {
 
 /**
  * Decide whether `member` is allowed to control playback right now.
- * Returns { allowed, reason }.
+ * In Scify Music's shared session architecture, all server members share queue and controls.
  */
 function canControl(state, member) {
   if (!hasAccess(member)) {
     return { allowed: false, reason: 'You do not have the role required to use this bot.' };
   }
-  // No state yet (e.g. clicking a panel after a bot restart) -> nothing locked.
-  if (!state || !state.lockHolderId) return { allowed: true };
-  // Locked by this same user -> allowed.
-  if (state.lockHolderId === member.id) return { allowed: true };
-  // Locked by someone else.
-  return {
-    allowed: false,
-    reason: '🔒 A priority user is currently controlling the music. You can play again once they stop or leave the voice channel.',
-  };
+  return { allowed: true };
 }
 
 // ---------- Slash command definitions ----------
@@ -74,14 +80,55 @@ function canControl(state, member) {
 const commands = [
   new SlashCommandBuilder()
     .setName('play')
-    .setDescription('Play music, or show your library if no query is given')
+    .setDescription('Play a song or queue multiple (comma-separated)')
     .addStringOption((o) =>
-      o.setName('query').setDescription('Link or search term (leave empty to open your library)').setRequired(false),
+      o.setName('query').setDescription('Song name, URL, or multiple separated by commas').setRequired(true),
     )
+    .toJSON(),
+  new SlashCommandBuilder()
+    .setName('queue')
+    .setDescription('See what\'s playing and what\'s coming up next')
+    .toJSON(),
+  new SlashCommandBuilder()
+    .setName('history')
+    .setDescription('Recently played songs & resume where you stopped')
     .toJSON(),
   new SlashCommandBuilder()
     .setName('controls')
     .setDescription('Open your personal music control panel')
+    .toJSON(),
+  new SlashCommandBuilder()
+    .setName('library')
+    .setDescription('Your personal music library')
+    .addSubcommand((sub) =>
+      sub.setName('view').setDescription('View your library and play it'),
+    )
+    .addSubcommand((sub) =>
+      sub.setName('add').setDescription('Add songs to your library (comma-separated)')
+        .addStringOption((o) =>
+          o.setName('songs').setDescription('Song name, URL, or multiple separated by commas').setRequired(true),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub.setName('remove').setDescription('Remove a song by its number')
+        .addIntegerOption((o) =>
+          o.setName('number').setDescription('Song number to remove').setRequired(true),
+        ),
+    )
+    .addSubcommand((sub) =>
+      sub.setName('import').setDescription('Import a Spotify playlist')
+        .addStringOption((o) =>
+          o.setName('url').setDescription('Spotify playlist URL').setRequired(true),
+        ),
+    )
+    .toJSON(),
+  new SlashCommandBuilder()
+    .setName('status')
+    .setDescription('View Sruti system status, latency, uptime, and stats')
+    .toJSON(),
+  new SlashCommandBuilder()
+    .setName('restart')
+    .setDescription('Restart the Sruti bot (Server Owner only)')
     .toJSON(),
 ];
 
@@ -94,8 +141,24 @@ async function registerCommands(guildId) {
 
 client.once(Events.ClientReady, async (c) => {
   console.log(`Logged in as ${c.user.tag}`);
-  // Register guild commands for every guild the bot is in (instant availability).
+  try {
+    if (c.user.username !== 'Sruti') {
+      await c.user.setUsername('Sruti').catch((err) => {
+        console.log('Bot username could not be set via API:', err.message);
+      });
+    }
+  } catch {}
+  try {
+    c.user.setActivity('Sruti | /play', { type: ActivityType.Listening });
+  } catch {}
+  // Register guild commands and ensure bot server nickname is Sruti
   for (const [, guild] of c.guilds.cache) {
+    try {
+      const me = await guild.members.fetchMe().catch(() => null);
+      if (me && me.nickname !== 'Sruti') {
+        await me.setNickname('Sruti').catch(() => {});
+      }
+    } catch {}
     try {
       await registerCommands(guild.id);
       console.log(`Registered commands in ${guild.name}`);
@@ -103,11 +166,15 @@ client.once(Events.ClientReady, async (c) => {
       console.error(`Failed to register commands in ${guild.id}:`, err.message);
     }
   }
-  // Start the REST API bridge for the desktop app.
-  startApiServer(music, store, c);
 });
 
 client.on(Events.GuildCreate, async (guild) => {
+  try {
+    const me = await guild.members.fetchMe().catch(() => null);
+    if (me && me.nickname !== 'Sruti') {
+      await me.setNickname('Sruti').catch(() => {});
+    }
+  } catch {}
   try {
     await registerCommands(guild.id);
   } catch (err) {
@@ -115,20 +182,71 @@ client.on(Events.GuildCreate, async (guild) => {
   }
 });
 
+// Auto-leave voice channel when everyone leaves
+const emptyChannelTimeouts = new Map();
+
+client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+  const guild = newState.guild || oldState.guild;
+  if (!guild) return;
+
+  const state = music.peek(guild.id);
+  if (!state || !state.voiceChannelId) return;
+
+  // If the bot itself was disconnected from voice
+  if (oldState.member?.id === client.user.id && !newState.channelId) {
+    if (emptyChannelTimeouts.has(guild.id)) {
+      clearTimeout(emptyChannelTimeouts.get(guild.id));
+      emptyChannelTimeouts.delete(guild.id);
+    }
+    music.remove(guild.id);
+    scifyCore.broadcastState();
+    return;
+  }
+
+  // Check the voice channel Sruti is currently in
+  const botVoiceChannel = guild.channels.cache.get(state.voiceChannelId);
+  if (!botVoiceChannel || !botVoiceChannel.isVoiceBased()) return;
+
+  const humanMembers = botVoiceChannel.members.filter((m) => !m.user.bot);
+
+  if (humanMembers.size === 0) {
+    // Nobody in the voice channel — start a 15-second grace countdown
+    if (!emptyChannelTimeouts.has(guild.id)) {
+      const timeout = setTimeout(() => {
+        emptyChannelTimeouts.delete(guild.id);
+        const currentChannel = guild.channels.cache.get(state.voiceChannelId);
+        const currentHumans = currentChannel?.members?.filter((m) => !m.user.bot);
+        if (!currentHumans || currentHumans.size === 0) {
+          if (typeof botVoiceChannel.send === 'function') {
+            botVoiceChannel.send('👋 Leaving voice channel because everyone left.').catch(() => {});
+          } else if (state.textChannel && typeof state.textChannel.send === 'function') {
+            state.textChannel.send('👋 Leaving voice channel because everyone left.').catch(() => {});
+          }
+          music.remove(guild.id);
+          scifyCore.broadcastState();
+        }
+      }, 15000);
+      emptyChannelTimeouts.set(guild.id, timeout);
+    }
+  } else {
+    // Users are present in the VC — cancel any pending leave timer
+    if (emptyChannelTimeouts.has(guild.id)) {
+      clearTimeout(emptyChannelTimeouts.get(guild.id));
+      emptyChannelTimeouts.delete(guild.id);
+    }
+  }
+});
+
 // ---------- Panel rendering for a specific viewer ----------
 
 function renderPanelFor(state, viewer) {
-  const locked = Boolean(state?.lockHolderId);
-  const lockedOut = locked && state.lockHolderId !== viewer.id;
-  const lockHolderTag = locked
-    ? viewer.guild.members.cache.get(state.lockHolderId)?.user?.tag
-    : undefined;
+  const isController = hasAccess(viewer);
 
   return {
-    embeds: [buildPanelEmbed(state, { locked, lockHolderTag })],
+    embeds: [buildPanelEmbed(state, { locked: false })],
     components: buildPanelComponents({
       paused: state ? state.isPaused() : false,
-      disabled: lockedOut || !state?.current,
+      disabled: !isController || !state?.current,
       loopMode: state?.loopMode ?? 'off',
     }),
   };
@@ -137,9 +255,8 @@ function renderPanelFor(state, viewer) {
 // ---------- Queue list view for a specific viewer ----------
 
 function renderQueueFor(state, viewer) {
-  const locked = Boolean(state?.lockHolderId);
-  const lockedOut = locked && state.lockHolderId !== viewer.id;
-  return buildQueueView(state, { disabled: lockedOut });
+  const isController = hasAccess(viewer);
+  return buildQueueView(state, { disabled: !isController });
 }
 
 // ---------- Interaction handling ----------
@@ -147,6 +264,11 @@ function renderQueueFor(state, viewer) {
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
+      // Immediate deferral: guarantees Discord's 3-second deadline is NEVER breached
+      const isPublic = interaction.commandName === 'play' || interaction.commandName === 'queue';
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ flags: isPublic ? undefined : MessageFlags.Ephemeral }).catch(() => {});
+      }
       await handleSlash(interaction);
     } else if (interaction.isButton()) {
       await handleButton(interaction);
@@ -155,11 +277,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
   } catch (err) {
     console.error('Interaction error:', err);
-    const payload = { content: `⚠️ ${err.message}`, flags: MessageFlags.Ephemeral };
+    const payload = { content: `⚠️ ${err.message}` };
     if (interaction.deferred || interaction.replied) {
-      interaction.followUp(payload).catch(() => {});
+      interaction.editReply(payload).catch(() => interaction.followUp(payload).catch(() => {}));
     } else {
-      interaction.reply(payload).catch(() => {});
+      interaction.reply({ ...payload, flags: MessageFlags.Ephemeral }).catch(() => {});
     }
   }
 });
@@ -168,75 +290,167 @@ async function handleSlash(interaction) {
   const member = interaction.member;
 
   if (!hasAccess(member)) {
-    return interaction.reply({
+    return interaction.editReply({
       content: 'You do not have the role required to use this bot.',
-      flags: MessageFlags.Ephemeral,
     });
   }
 
-  const state = music.get(interaction.guild.id);
-
-  if (interaction.commandName === 'play') {
-    const query = interaction.options.getString('query', false);
-
-    // No query -> show the library (continue + recently played) privately.
-    if (!query) {
-      const session = store.getSession(interaction.guild.id);
-      const history = store.getHistory(interaction.guild.id);
-      return interaction.reply({
-        ...buildLibraryView(session, history),
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-
-    const voiceChannel = member.voice?.channel;
-    if (!voiceChannel) {
-      return interaction.reply({
-        content: 'You need to be in a voice channel first.',
-        flags: MessageFlags.Ephemeral,
-      });
-    }
-
-    // Enforce the priority lock before starting anything new.
-    const control = canControl(state, member);
-    if (!control.allowed) {
-      return interaction.reply({ content: control.reason, flags: MessageFlags.Ephemeral });
-    }
-
-    // Acknowledge immediately so we never hit the 3s interaction deadline,
-    // since resolving the track can take a moment.
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-    state.textChannel = interaction.channel;
-    // Remember who last started playback, so we can DM them (privately) when
-    // the queue finishes instead of posting a public message.
-    state.starterUser = member.user;
-    if (!state.connection || state.voiceChannelId !== voiceChannel.id) {
-      state.connect(voiceChannel);
-    }
-
-    const { tracks, label } = await resolveTracks(query, member.user.username);
-    state.enqueue(tracks);
-
-    // If a priority user starts playback, they take the lock.
-    if (isPriority(member) && !state.lockHolderId) {
-      state.lockHolderId = member.id;
-    }
-
-    await state.start();
-
-    await interaction.editReply({
-      content: `✅ Added: **${label}**`,
-      ...renderPanelFor(state, member),
+  if (interaction.commandName === 'status') {
+    return interaction.editReply({
+      embeds: [buildStatusEmbed({ client, music, uptime: process.uptime() })],
     });
+  }
+
+  if (interaction.commandName === 'restart') {
+    if (member.id !== interaction.guild.ownerId) {
+      return interaction.editReply({
+        content: '⚠️ Only the server owner can trigger a bot restart.',
+      });
+    }
+    await interaction.editReply({
+      content: '🔄 Persisting sessions and restarting Scify Music Bot…',
+    });
+    for (const [, s] of music.states ?? []) {
+      try { s.persistSession(); } catch {}
+    }
+    setTimeout(() => {
+      process.exit(0);
+    }, 1000);
     return;
   }
 
-  if (interaction.commandName === 'controls') {
-    return interaction.reply({
-      ...renderPanelFor(state, member),
-      flags: MessageFlags.Ephemeral,
+  if (interaction.commandName === 'history') {
+    const session = store.getSession(interaction.guild.id);
+    const history = store.getHistory(interaction.guild.id);
+    return interaction.editReply({
+      ...buildLibraryView(session, history),
     });
+  }
+
+  if (interaction.commandName === 'library') {
+    const sub = interaction.options.getSubcommand();
+
+    if (sub === 'view') {
+      const userLib = store.getUserLibrary(interaction.guild.id, member.id);
+      return interaction.editReply({
+        ...buildUserLibraryView(userLib, member.user.username),
+      });
+    }
+
+    if (sub === 'add') {
+      const songs = interaction.options.getString('songs', true);
+      if (songs.length > 500) {
+        return interaction.editReply({
+          content: 'Query is too long. Keep it under 500 characters.',
+        });
+      }
+
+      try {
+        const { tracks, label } = await resolveTracks(songs, member.displayName || member.user.username);
+        store.addToUserLibrary(interaction.guild.id, member.id, tracks);
+        await interaction.editReply({
+          content: `✅ Added to your library: **${label}**\nYou now have **${store.getUserLibrary(interaction.guild.id, member.id).length}** song(s) in your library.`,
+        });
+      } catch (err) {
+        await interaction.editReply({ content: `⚠️ ${err.message}` });
+      }
+      return;
+    }
+
+    if (sub === 'remove') {
+      const num = interaction.options.getInteger('number', true);
+      const removed = store.removeFromUserLibrary(interaction.guild.id, member.id, num - 1);
+      if (!removed) {
+        return interaction.editReply({
+          content: `Invalid number. Use \`/library view\` to see your library.`,
+        });
+      }
+      return interaction.editReply({
+        content: `🗑️ Removed **${removed.title}** from your library.`,
+      });
+    }
+
+    if (sub === 'import') {
+      const url = interaction.options.getString('url', true);
+
+      if (!url.includes('spotify.com/playlist') && !url.includes('spotify:playlist:')) {
+        return interaction.editReply({
+          content: 'That doesn\'t look like a Spotify playlist URL. Use a link like `https://open.spotify.com/playlist/...`',
+        });
+      }
+
+      try {
+        const { name, tracks } = await fetchSpotifyPlaylist(url);
+        store.saveSpotifyImport(interaction.guild.id, member.id, { name, tracks });
+        await interaction.editReply({
+          ...buildSpotifyImportView(name, tracks),
+        });
+      } catch (err) {
+        await interaction.editReply({ content: `⚠️ ${err.message}` });
+      }
+      return;
+    }
+  }
+
+  if (interaction.commandName === 'controls') {
+    const state = music.peek(interaction.guild.id);
+    return interaction.editReply({
+      ...renderPanelFor(state, member),
+    });
+  }
+
+  if (interaction.commandName === 'queue') {
+    const state = music.peek(interaction.guild.id);
+    return interaction.editReply({
+      ...renderQueueFor(state, member),
+    });
+  }
+
+  if (interaction.commandName === 'play') {
+    const query = interaction.options.getString('query', true);
+
+    // Validate the query: reject excessively long input.
+    if (query.length > 500) {
+      return interaction.editReply({
+        content: 'Query is too long. Keep it under 500 characters.',
+      });
+    }
+
+    const state = music.get(interaction.guild.id);
+    const voiceChannel = member.voice?.channel;
+
+    if (!state.isConnected() && !voiceChannel) {
+      return interaction.editReply({
+        content: '⚠️ You need to join a voice channel first so Sruti knows where to connect!',
+      });
+    }
+
+    state.textChannel = interaction.channel;
+    state.starterUser = member.user;
+
+    if (voiceChannel && (!state.isConnected() || state.voiceChannelId !== voiceChannel.id)) {
+      state.connect(voiceChannel);
+    }
+
+    const requesterTag = member.displayName || member.user.username;
+
+    try {
+      const { tracks, label } = await resolveTracks(query, requesterTag);
+      state.enqueue(tracks);
+
+      await state.start();
+
+      await interaction.editReply({
+        content: `✅ Queued: **${label}** • *Added by <@${member.id}>*`,
+        ...renderPanelFor(state, member),
+      });
+    } catch (err) {
+      console.error('/play execution error:', err);
+      await interaction.editReply({
+        content: `⚠️ Failed to play: ${err.message}`,
+      });
+    }
+    return;
   }
 }
 
@@ -262,7 +476,91 @@ async function handleButton(interaction) {
     return interaction.update(renderQueueFor(state, member));
   }
 
-  // All other actions modify playback -> check the lock.
+  // --- Approve/Deny permission requests ---
+  if (action.startsWith('approve:') || action.startsWith('deny:')) {
+    const parts = action.split(':');
+    const decision = parts[0]; // 'approve' or 'deny'
+    const requestedAction = parts[1]; // 'skip' or 'stop'
+    const requesterId = parts[2];
+
+    // Only the controller can approve/deny.
+    if (!state?.starterUser || state.starterUser.id !== member.id) {
+      return interaction.reply({ content: 'Only the current controller can decide.', flags: MessageFlags.Ephemeral });
+    }
+
+    if (decision === 'approve') {
+      if (requestedAction === 'skip') state.skip();
+      else if (requestedAction === 'stop') state.stop();
+      await interaction.update({
+        content: `✅ **${member.user.username}** approved the **${requestedAction}** request from <@${requesterId}>.`,
+        components: [],
+      });
+    } else {
+      await interaction.update({
+        content: `❌ **${member.user.username}** denied the **${requestedAction}** request from <@${requesterId}>.`,
+        components: [],
+      });
+    }
+    return;
+  }
+
+  // --- Spotify import actions (no playback control needed) ---
+  if (action === 'spotifyconfirm' || action === 'spotifycancel') {
+    if (action === 'spotifycancel') {
+      store.clearSpotifyImport(interaction.guild.id, member.id);
+      return interaction.update({ content: '❌ Import cancelled.', embeds: [], components: [] });
+    }
+
+    // Confirm: resolve each Spotify track to YouTube and add to user library.
+    const importData = store.getSpotifyImport(interaction.guild.id, member.id);
+    if (!importData || !importData.tracks.length) {
+      return interaction.update({ content: '⚠️ No import data found. Try `/libimport` again.', embeds: [], components: [] });
+    }
+
+    await interaction.update({
+      content: `⏳ Importing **${importData.tracks.length}** tracks from **${importData.name}**… This may take a moment.`,
+      embeds: [],
+      components: [],
+    });
+
+    const resolved = [];
+    const failed = [];
+
+    for (const t of importData.tracks) {
+      try {
+        const { tracks } = await resolveTracks(t.searchQuery, member.user.username);
+        if (tracks.length > 0) {
+          resolved.push({
+            url: tracks[0].url,
+            title: t.title,
+            durationInSec: t.durationInSec || tracks[0].durationInSec || 0,
+          });
+        } else {
+          failed.push(t.title);
+        }
+      } catch {
+        failed.push(t.title);
+      }
+    }
+
+    if (resolved.length > 0) {
+      store.addToUserLibrary(interaction.guild.id, member.id, resolved);
+    }
+    store.clearSpotifyImport(interaction.guild.id, member.id);
+
+    let msg = `✅ Imported **${resolved.length}/${importData.tracks.length}** tracks into your library.`;
+    if (failed.length > 0) {
+      const showFailed = failed.slice(0, 5).map((f) => `• ${f}`).join('\n');
+      msg += `\n\n❌ Couldn't find (${failed.length}):\n${showFailed}`;
+      if (failed.length > 5) msg += `\n…and ${failed.length - 5} more`;
+    }
+    msg += `\n\nUse \`/lib\` to see your library.`;
+
+    await interaction.editReply({ content: msg });
+    return;
+  }
+
+  // Check role access
   const control = canControl(state, member);
   if (!control.allowed) {
     return interaction.reply({ content: control.reason, flags: MessageFlags.Ephemeral });
@@ -270,7 +568,7 @@ async function handleButton(interaction) {
 
   // Library actions (continue / replay) start playback, so they need a voice
   // channel but NOT an already-playing track. Handle them before that guard.
-  if (action === 'continue' || action.startsWith('replay:')) {
+  if (action === 'continue' || action.startsWith('replay:') || action === 'playlib') {
     const voiceChannel = member.voice?.channel;
     if (!voiceChannel) {
       return interaction.reply({
@@ -282,7 +580,7 @@ async function handleButton(interaction) {
     const liveState = music.get(interaction.guild.id);
     liveState.textChannel = interaction.channel;
     liveState.starterUser = member.user;
-    if (!liveState.connection || liveState.voiceChannelId !== voiceChannel.id) {
+    if (!liveState.isConnected() || liveState.voiceChannelId !== voiceChannel.id) {
       liveState.connect(voiceChannel);
     }
     if (isPriority(member) && !liveState.lockHolderId) {
@@ -294,6 +592,13 @@ async function handleButton(interaction) {
       if (action === 'continue') {
         const session = store.getSession(interaction.guild.id);
         await liveState.resumeSession(session);
+      } else if (action === 'playlib') {
+        // Play the user's entire personal library as a playlist.
+        const userLib = store.getUserLibrary(interaction.guild.id, member.id);
+        if (!userLib.length) throw new Error('Your library is empty. Add songs with `/library add`.');
+        await liveState.waitUntilReady();
+        liveState.queue = userLib.map((t) => ({ ...t, requestedBy: member.user.username }));
+        await liveState.playNext();
       } else {
         const index = parseInt(action.slice(7), 10);
         const history = store.getHistory(interaction.guild.id);
@@ -324,6 +629,16 @@ async function handleButton(interaction) {
   }
 
   switch (action) {
+    case 'prev': {
+      await interaction.deferUpdate();
+      await state.previous();
+      setTimeout(() => interaction.editReply(renderPanelFor(state, member)).catch(() => {}), 1200);
+      return;
+    }
+    case 'shuffle': {
+      state.shuffle();
+      return interaction.update(renderPanelFor(state, member));
+    }
     case 'playpause': {
       if (state.isPaused()) state.resume();
       else state.pause();
@@ -416,22 +731,86 @@ async function handleModal(interaction) {
 }
 
 // ---------- Release the lock when the priority user leaves the VC ----------
+// ---------- Auto-leave when the VC is empty for 2 minutes ----------
+
+const leaveTimers = new Map(); // guildId -> timeout
 
 client.on(Events.VoiceStateUpdate, (oldState, newState) => {
   const guildId = oldState.guild.id;
   const state = music.peek(guildId);
-  if (!state || !state.lockHolderId) return;
 
-  // Only care about the lock holder.
-  if (oldState.id !== state.lockHolderId) return;
+  // --- Priority lock release ---
+  if (state?.lockHolderId && oldState.id === state.lockHolderId) {
+    const left = oldState.channelId === state.voiceChannelId && newState.channelId !== state.voiceChannelId;
+    if (left) {
+      state.lockHolderId = null;
+      if (state.textChannel) {
+        state.textChannel.send('🔓 Priority user left — controls are open to everyone again.').catch(() => {});
+      }
+    }
+  }
 
-  const left = oldState.channelId === state.voiceChannelId && newState.channelId !== state.voiceChannelId;
-  if (left) {
-    state.lockHolderId = null;
-    if (state.textChannel) {
-      state.textChannel.send('🔓 Priority user left — controls are open to everyone again.').catch(() => {});
+  // --- Auto-leave if VC is empty (only the bot remains) ---
+  if (!state || !state.voiceChannelId) return;
+
+  const voiceChannel = oldState.guild.channels.cache.get(state.voiceChannelId);
+  if (!voiceChannel) return;
+
+  // Count human members (exclude bots)
+  const humans = voiceChannel.members.filter((m) => !m.user.bot).size;
+
+  if (humans === 0) {
+    // Start a 2-minute timer to leave
+    if (!leaveTimers.has(guildId)) {
+      const timer = setTimeout(() => {
+        leaveTimers.delete(guildId);
+        const currentState = music.peek(guildId);
+        if (!currentState) return;
+
+        // Re-check: still empty?
+        const vc = oldState.guild.channels.cache.get(currentState.voiceChannelId);
+        const stillEmpty = !vc || vc.members.filter((m) => !m.user.bot).size === 0;
+
+        if (stillEmpty) {
+          currentState.persistSession();
+          currentState.destroy();
+          music.states.delete(guildId);
+          console.log(`[${guildId}] Left VC — empty for 2 minutes.`);
+        }
+      }, 2 * 60 * 1000); // 2 minutes
+      leaveTimers.set(guildId, timer);
+    }
+  } else {
+    // Someone joined back — cancel the leave timer
+    if (leaveTimers.has(guildId)) {
+      clearTimeout(leaveTimers.get(guildId));
+      leaveTimers.delete(guildId);
     }
   }
 });
 
-client.login(TOKEN);
+// ---------- Graceful shutdown ----------
+
+async function shutdown(signal) {
+  console.log(`\n${signal} received — shutting down gracefully…`);
+  // Persist sessions & kill streams for every guild.
+  for (const [, state] of music.states ?? []) {
+    try { state.persistSession(); } catch {}
+    try { state.destroy(); } catch {}
+  }
+  client.destroy();
+  process.exit(0);
+}
+
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
+});
+
+client.login(TOKEN).catch((err) => {
+  console.error('Failed to log in — is your DISCORD_TOKEN correct?', err.message);
+  if (!process.versions.electron) {
+    process.exit(1);
+  }
+});

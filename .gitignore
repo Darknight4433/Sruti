@@ -1,4 +1,28 @@
 node_modules/
 .env
+.env.*
+!.env.example
 *.log
 data/
+
+# Cookies (contains YouTube auth — never commit)
+cookies.txt
+*.cookies
+
+# Windows launcher scripts
+*.bat
+*.vbs
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build artifacts
+dist/

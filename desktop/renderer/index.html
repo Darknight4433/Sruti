@@ -1,583 +1,1167 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Scify Music</title>
-  <meta name="description" content="Scify Music — Discord music bot desktop controller" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sruti</title>
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
-<body>
-  <!-- Custom title bar -->
-  <div class="titlebar" id="titlebar">
-    <div class="titlebar-drag">
-      <img src="../assets/logo.svg" class="titlebar-logo" alt="Scify" onerror="this.style.display='none'" />
-      <span class="titlebar-title">Scify Music</span>
+<body class="theme-dark">
+  <!-- Frameless Custom Titlebar -->
+  <header class="app-titlebar">
+    <div class="titlebar-drag-region">
+      <div class="app-logo">
+        <div class="logo-slot" id="appLogoSlot">
+          <img id="appLogoImg" class="logo-img" src="assets/logo.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';" alt="Sruti" style="display:none; width: 22px; height: 22px; border-radius: 6px; object-fit: cover;">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" stroke="url(#logo-grad)"/>
+            <path d="M9 8l7 4-7 4V8z" fill="url(#logo-grad)"/>
+            <defs>
+              <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="var(--accent-color)" />
+                <stop offset="100%" stop-color="#b5179e" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <span class="app-title">SRUTI</span>
+        <span class="version-tag">v2.0</span>
+      </div>
+      <div class="bot-badge" id="botBadge">
+        <span class="status-dot"></span>
+        <span class="status-text">DISCORD: CONNECTING…</span>
+      </div>
+      <div class="accent-quick-bar" id="accentQuickBar" title="Click to change accent color">
+        <button class="accent-mini-btn active" data-accent="cyan" style="background:#00f0ff;" title="Electric Cyan"></button>
+        <button class="accent-mini-btn" data-accent="emerald" style="background:#00ff88;" title="Matrix Emerald"></button>
+        <button class="accent-mini-btn" data-accent="violet" style="background:#a855f7;" title="Cyber Violet"></button>
+        <button class="accent-mini-btn" data-accent="rose" style="background:#ff2e93;" title="Sunset Rose"></button>
+        <button class="accent-mini-btn" data-accent="amber" style="background:#ffb703;" title="Solar Amber"></button>
+        <button class="accent-mini-btn" data-accent="ruby" style="background:#ff3366;" title="Neon Ruby"></button>
+      </div>
+      <button class="user-vc-badge" id="btnUserVcBadge" title="Click to set your Discord username or teleport bot to your voice channel">
+        <img id="userVcAvatar" class="user-vc-avatar" src="" style="display:none;" alt="">
+        <span id="userVcAvatarPlaceholder" class="user-vc-avatar-ph">👤</span>
+        <span id="userVcName" class="user-vc-name">Link Discord User</span>
+        <span id="userVcChannelTag" class="user-vc-tag">⚡ Link VC</span>
+      </button>
     </div>
     <div class="titlebar-controls">
-      <button class="tbtn" id="btn-minimize" title="Minimize">&#8211;</button>
-      <button class="tbtn" id="btn-maximize" title="Maximize">&#9633;</button>
-      <button class="tbtn tbtn-close" id="btn-close" title="Close">&#10005;</button>
+      <button class="win-btn" id="btnMinimize" title="Minimize">
+        <svg viewBox="0 0 12 12"><rect y="5" width="12" height="1.5" fill="currentColor"/></svg>
+      </button>
+      <button class="win-btn" id="btnMaximize" title="Maximize">
+        <svg viewBox="0 0 12 12"><rect x="1.5" y="1.5" width="9" height="9" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+      </button>
+      <button class="win-btn win-close" id="btnClose" title="Close">
+        <svg viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5"/></svg>
+      </button>
     </div>
-  </div>
+  </header>
 
-  <!-- First-run setup overlay -->
-  <div class="setup-overlay" id="setup-overlay" style="display:none;">
-    <div class="setup-card">
-      <div class="setup-header">
-        <div style="font-size: 48px; margin-bottom: 12px;">🎵</div>
-        <h1 style="font-size: 24px; font-weight: 700; margin: 0;">Welcome to Scify Music</h1>
-        <p style="color: var(--text-secondary); margin-top: 8px; font-size: 14px;">Ad-free music in your Discord voice channel. One click to get started.</p>
+  <!-- Main Application Container -->
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="app-sidebar">
+      <div class="sidebar-section">
+        <div class="section-label">MAIN</div>
+        <button class="nav-item active" data-screen="home">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+          <span>Home</span>
+        </button>
+        <button class="nav-item" data-screen="search">
+          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <span>Search</span>
+        </button>
+        <button class="nav-item" data-screen="player">
+          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+          <span>Now Playing</span>
+        </button>
+        <button class="nav-item" data-screen="queue">
+          <svg class="nav-icon" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+          <span>Queue</span>
+          <span class="nav-counter" id="queueNavCount">0</span>
+        </button>
       </div>
 
-      <div class="setup-step" id="setup-step-invite">
-        <div class="setup-step-header">
-          <span class="setup-step-num">1</span>
-          <span>Add the bot to your Discord server</span>
-        </div>
-        <p class="setup-hint">Click below to open Discord. Pick your server and authorize Scify Music. Then come back here.</p>
-        <button class="primary-btn" id="btn-setup-invite" style="width:100%; margin: 12px 0; font-size: 15px; padding: 14px;">🔗 Connect to Discord</button>
-        <button class="ghost-btn" id="btn-setup-done" style="width:100%; margin-top: 8px;">✅ Done — I've added the bot</button>
-        <div class="setup-error" id="setup-error" style="color:#f87171; font-size:12px; margin-top:8px;"></div>
+      <div class="sidebar-section">
+        <div class="section-label">COLLECTIONS</div>
+        <button class="nav-item" data-screen="library">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="m16 6 4 14M12 6v14M8 8v12M4 4v16"/></svg>
+          <span>Library</span>
+          <span class="nav-counter" id="libNavCount">0</span>
+        </button>
+        <button class="nav-item" data-screen="playlists">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+          <span>Playlists</span>
+        </button>
+        <button class="nav-item" data-screen="favorites">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <span>Favorites</span>
+        </button>
+        <button class="nav-item" data-screen="history">
+          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>History</span>
+        </button>
       </div>
-    </div>
-  </div>
 
-  <!-- Main layout -->
-  <div class="layout">
-    <!-- Sidebar -->
-    <nav class="sidebar" id="sidebar">
-      <div class="sidebar-brand">
-        <div class="brand-icon">🎵</div>
-        <div class="brand-text">
-          <div class="brand-name">Scify Music</div>
-          <div class="brand-sub">Discord Bot Controller</div>
-          <div class="bot-status-badge" id="bot-status-badge">
-            <span class="bot-status-dot" id="bot-status-dot"></span>
-            <span id="bot-status-text">Stopped</span>
+      <div class="sidebar-section">
+        <div class="section-label">DISCORD ECOSYSTEM</div>
+        <button class="nav-item discord-nav-btn" data-screen="add-discord">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z"/>
+          </svg>
+          <span class="highlight-text">+ Add to Discord</span>
+        </button>
+        <button class="nav-item" data-screen="discord-servers">
+          <svg class="nav-icon" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          <span>Servers & VC</span>
+        </button>
+        <button class="nav-item" data-screen="discord-simulator">
+          <svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>Discord Panels</span>
+        </button>
+      </div>
+
+      <div class="sidebar-section">
+        <div class="section-label">SYSTEM</div>
+        <button class="nav-item" data-screen="statistics">
+          <svg class="nav-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          <span>Statistics</span>
+        </button>
+        <button class="nav-item" data-screen="settings">
+          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>Settings</span>
+        </button>
+        <button class="nav-item" data-screen="about">
+          <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>About</span>
+        </button>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="output-selector-card">
+          <span class="output-label">PLAYBACK TARGET</span>
+          <div class="output-toggle-group">
+            <button class="output-btn active" id="btnOutputLocal" title="Play on this PC">
+              🎧 Desktop
+            </button>
+            <button class="output-btn" id="btnOutputDiscord" title="Stream into Discord Voice Channel">
+              🎙️ Discord VC
+            </button>
           </div>
         </div>
       </div>
+    </aside>
 
-      <div class="nav-section">
-        <div class="nav-label">MENU</div>
-        <a class="nav-item active" data-view="now-playing" id="nav-now-playing">
-          <span class="nav-icon">🎧</span> Now Playing
-        </a>
-        <a class="nav-item" data-view="search" id="nav-search">
-          <span class="nav-icon">🔍</span> Search
-        </a>
-        <a class="nav-item" data-view="queue" id="nav-queue">
-          <span class="nav-icon">📋</span> Queue
-          <span class="queue-badge" id="queue-count" style="display:none"></span>
-        </a>
-        <a class="nav-item" data-view="library" id="nav-library">
-          <span class="nav-icon">📚</span> Library
-        </a>
-        <a class="nav-item" data-view="playlists" id="nav-playlists">
-          <span class="nav-icon">🎶</span> Playlists
-        </a>
-      </div>
+    <!-- Main Content Stage with 16 Screens -->
+    <main class="app-main" id="mainStage">
 
-      <div class="nav-section" style="margin-top:auto">
-        <a class="nav-item" data-view="settings" id="nav-settings">
-          <span class="nav-icon">⚙️</span> Settings
-        </a>
-      </div>
+      <!-- SCREEN 1: SPLASH -->
+      <section class="screen-view active-screen" id="screen-splash">
+        <div class="splash-container">
+          <div class="splash-glow"></div>
+          <svg class="splash-logo" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10" stroke="var(--accent-color)" stroke-width="1.5" fill="none"/>
+            <polygon points="10 8 16 12 10 16 10 8" fill="var(--accent-color)"/>
+          </svg>
+          <h1 class="splash-title">SRUTI</h1>
+          <p class="splash-sub">Windows Desktop Application &amp; Discord Ecosystem</p>
+          <div class="splash-loader"><div class="splash-bar"></div></div>
+          <p class="splash-status" id="splashStatusText">Initializing audio engine &amp; Discord bridge…</p>
+        </div>
+      </section>
 
-      <!-- Connection status -->
-      <div class="status-pill" id="connection-status">
-        <span class="status-dot" id="status-dot"></span>
-        <span id="status-text">Connecting…</span>
-      </div>
-    </nav>
-
-    <!-- Content area -->
-    <main class="content" id="content">
-
-      <!-- ── NOW PLAYING ── -->
-      <section class="view active" id="view-now-playing">
-        <div class="now-playing-layout">
-          <!-- Album art & track info -->
-          <div class="art-section">
-            <div class="art-frame" id="art-frame">
-              <img class="art-img" id="art-img" src="" alt="Album Art" />
-              <div class="art-placeholder" id="art-placeholder">🎵</div>
-            </div>
-            <div class="track-info">
-              <div class="track-title" id="track-title">Nothing playing</div>
-              <div class="track-sub" id="track-sub">Start a song from Search or Library</div>
+      <!-- SCREEN 2: HOME -->
+      <section class="screen-view" id="screen-home">
+        <!-- Hero Banner with Add to Discord & Quick Search -->
+        <div class="hero-banner">
+          <div class="hero-content">
+            <div class="hero-tag">SRUTI MUSIC ECOSYSTEM</div>
+            <h1 class="hero-title">Experience Ad-Free Music Anywhere.</h1>
+            <p class="hero-desc">Stream seamlessly on your Windows desktop or synchronize directly with your Discord voice channels in ultra-high fidelity.</p>
+            <div class="hero-actions">
+              <button class="btn btn-discord btn-lg" id="btnHeroAddDiscord">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z"/>
+                </svg>
+                <span>Add Sruti to Discord</span>
+              </button>
+              <button class="btn btn-secondary btn-lg" id="btnHeroOpenSearch">
+                <svg class="btn-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <span>Search Music</span>
+              </button>
             </div>
           </div>
-
-          <!-- Controls -->
-          <div class="controls-section">
-            <!-- Progress bar -->
-            <div class="progress-area">
-              <span class="time-label" id="time-current">0:00</span>
-              <div class="progress-bar-wrap" id="progress-wrap">
-                <div class="progress-bar" id="progress-bar">
-                  <div class="progress-fill" id="progress-fill"></div>
-                  <div class="progress-thumb" id="progress-thumb"></div>
+          <div class="hero-art">
+            <div class="hero-vinyl-wrapper" id="heroVinylWrapper" title="Click to open Now Playing">
+              <div class="pulse-ring" id="heroPulseRing"></div>
+              <div class="hero-vinyl" id="heroVinyl">
+                <img class="hero-vinyl-cover" id="heroVinylCover" src="" alt="Album Art" style="display: none;" />
+                <div class="vinyl-center">
+                  <div class="vinyl-spindle"></div>
                 </div>
               </div>
-              <span class="time-label" id="time-total">0:00</span>
             </div>
-
-            <!-- Playback buttons -->
-            <div class="playback-buttons">
-              <button class="ctrl-btn loop-btn" id="btn-loop" title="Loop">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/></svg>
-              </button>
-              <button class="ctrl-btn" id="btn-back" title="Back 15s">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/><text x="8" y="15" font-size="6" fill="currentColor">15</text></svg>
-              </button>
-              <button class="ctrl-btn play-btn" id="btn-playpause" title="Play/Pause">
-                <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-                <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
-              </button>
-              <button class="ctrl-btn" id="btn-forward" title="Forward 15s">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 13c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6v4l5-5-5-5v3c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8h-2z"/><text x="8" y="15" font-size="6" fill="currentColor">15</text></svg>
-              </button>
-              <button class="ctrl-btn" id="btn-skip" title="Skip track">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z"/></svg>
-              </button>
-            </div>
-
-            <!-- Stop & Queue quick add -->
-            <div class="secondary-controls">
-              <button class="ghost-btn" id="btn-stop">⏹ Stop</button>
-              <button class="ghost-btn" id="btn-go-queue">📋 See Queue</button>
-            </div>
-          </div>
-
-          <!-- Queue preview (right side) -->
-          <div class="queue-preview">
-            <div class="queue-preview-header">Up Next</div>
-            <div class="queue-preview-list" id="queue-preview-list">
-              <div class="empty-state-small">Queue is empty</div>
+            <div class="hero-now-playing-badge" id="heroNowPlayingBadge" style="display: none;" title="Click to open Now Playing">
+              <span class="badge-dot"></span>
+              <div class="badge-info">
+                <span class="badge-status">NOW STREAMING</span>
+                <span class="badge-title" id="heroBadgeTitle">Track Title</span>
+              </div>
             </div>
           </div>
         </div>
-      </section>
 
-      <!-- ── SEARCH ── -->
-      <section class="view" id="view-search">
-        <div class="view-header">
-          <h1 class="view-title">Search</h1>
-          <p class="view-subtitle">Search YouTube or paste a link to queue a song</p>
+        <!-- Quick Action Pills -->
+        <div class="quick-pills">
+          <button class="pill" data-quick="play-recent">▶ Play Recent</button>
+          <button class="pill" data-quick="view-queue">📋 View Queue</button>
+          <button class="pill" data-quick="my-library">📚 Personal Library</button>
+          <button class="pill" data-quick="my-playlists">🎵 Playlists</button>
+          <button class="pill" data-quick="spotify-import">🟢 Import Spotify</button>
+          <button class="pill" data-quick="discord-servers">🌐 Discord Servers</button>
+          <button class="pill" data-quick="teleport-user-vc" style="border-color: rgba(0, 240, 255, 0.5); color: #00f0ff;">⚡ Teleport to My VC</button>
         </div>
 
-        <div class="search-box-wrap">
-          <span class="search-icon">🔍</span>
-          <input
-            type="text"
-            class="search-input"
-            id="search-input"
-            placeholder="Search for a song, artist, or paste a YouTube link…"
-            autocomplete="off"
-          />
-          <button class="search-clear" id="search-clear" style="display:none">✕</button>
-        </div>
-
-        <div id="search-results" class="results-grid"></div>
-      </section>
-
-      <!-- ── QUEUE ── -->
-      <section class="view" id="view-queue">
-        <div class="view-header">
-          <h1 class="view-title">Queue</h1>
-          <div class="view-actions">
-            <button class="ghost-btn" id="btn-clear-queue">🗑 Clear All</button>
+        <!-- Section: Recently Played -->
+        <div class="content-section">
+          <div class="section-header">
+            <h2>Recently Played</h2>
+            <button class="btn-link" data-screen="history">See History &rarr;</button>
+          </div>
+          <div class="cards-grid" id="homeRecentGrid">
+            <!-- Populated from real history -->
           </div>
         </div>
-        <div id="queue-list" class="track-list"></div>
-      </section>
 
-      <!-- ── LIBRARY ── -->
-      <section class="view" id="view-library">
-        <div class="view-header">
-          <h1 class="view-title">Recently Played</h1>
-          <p class="view-subtitle">Your last 25 tracks played through the bot</p>
+        <!-- Section: Quick Library Access -->
+        <div class="content-section">
+          <div class="section-header">
+            <h2>Your Library</h2>
+            <button class="btn-link" data-screen="library">View All &rarr;</button>
+          </div>
+          <div class="cards-grid" id="homeLibraryGrid">
+            <!-- Populated from real library -->
+          </div>
         </div>
-        <div id="library-list" class="results-grid"></div>
+
+        <!-- Section: Playlists Grid -->
+        <div class="content-section">
+          <div class="section-header">
+            <h2>Your Playlists</h2>
+            <button class="btn btn-sm btn-primary" id="btnHomeNewPlaylist">+ New Playlist</button>
+          </div>
+          <div class="cards-grid" id="homePlaylistsGrid">
+            <!-- Populated from real playlists -->
+          </div>
+        </div>
       </section>
 
-      <!-- ── PLAYLISTS (Library View) ── -->
-      <section class="view" id="view-playlists">
+      <!-- SCREEN 3: SEARCH -->
+      <section class="screen-view" id="screen-search">
+        <div class="search-header">
+          <div class="search-box">
+            <svg class="search-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input type="text" id="searchInput" placeholder="Search by song name, artist, YouTube URL, or playlist link…" autocomplete="off" autofocus>
+            <button class="search-clear-btn" id="btnSearchClear">&times;</button>
+          </div>
+          <div class="search-tabs">
+            <button class="tab-btn active" data-tab="all">All Sources</button>
+            <button class="tab-btn" data-tab="youtube">YouTube</button>
+            <button class="tab-btn" data-tab="ytmusic">YouTube Music</button>
+            <button class="tab-btn" data-tab="spotify">Spotify Match</button>
+          </div>
+        </div>
+
+        <div class="search-recent-tags" id="searchHistoryTags">
+          <!-- Recent search chips -->
+        </div>
+
+        <div class="search-results-area">
+          <div class="results-header" id="searchResultsHeader" style="display: none;">
+            <h3>Results</h3>
+            <span id="searchResultsCount">0 tracks</span>
+          </div>
+          <div class="search-results-list" id="searchResultsList">
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" class="empty-icon"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+              <h3>Discover any song instantly</h3>
+              <p>Type above to search across YouTube & YouTube Music with clean ad-free streams.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 4: NOW PLAYING (Full Immersive Screen) -->
+      <section class="screen-view" id="screen-player">
+        <div class="player-stage">
+          <div class="player-visual-column">
+            <div class="artwork-glow-wrapper">
+              <img src="" alt="Album Artwork" class="player-large-artwork" id="playerLargeArt">
+              <div class="artwork-placeholder" id="playerArtPlaceholder">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+              </div>
+            </div>
+            <!-- Canvas Audio Visualizer -->
+            <div class="visualizer-container">
+              <canvas id="audioVisualizerCanvas" width="500" height="80"></canvas>
+            </div>
+          </div>
+
+          <div class="player-info-column">
+            <div class="track-meta">
+              <div class="target-badge-row" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;">
+                <div class="track-source-badge" id="playerTargetBadge" style="margin-bottom: 0;">🎙️ TARGET: DISCORD SERVER VC</div>
+                <select class="select-sort server-session-select" id="playerServerSelect" title="Select Active Discord Server Session" style="display: none; padding: 4px 10px; font-size: 0.75rem; border-color: rgba(0, 240, 255, 0.4);"></select>
+                <div class="summoner-badge" id="playerSummonerBadge" style="display: none; align-items: center; gap: 6px; background: rgba(181, 23, 158, 0.18); border: 1px solid rgba(181, 23, 158, 0.5); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; color: #ff70ec;">
+                  <span id="playerSummonerAvatar" style="display:inline-block;">👤</span>
+                  <span>Summoned by:</span>
+                  <strong id="playerSummonerName" style="color:#fff;">Commander</strong>
+                </div>
+              </div>
+              <h1 class="track-title-large" id="playerTitle">No Track Playing</h1>
+              <p class="track-artist-large" id="playerArtist">Select a track from Home or Search to begin</p>
+            </div>
+
+            <!-- Scrubber & Progress -->
+            <div class="player-scrubber-box">
+              <div class="scrubber-bar" id="playerScrubber">
+                <div class="scrubber-fill" id="playerScrubberFill" style="width: 0%;"></div>
+                <div class="scrubber-thumb" id="playerScrubberThumb"></div>
+              </div>
+              <div class="scrubber-times">
+                <span id="playerTimeCurrent">0:00</span>
+                <span id="playerTimeTotal">0:00</span>
+              </div>
+            </div>
+
+            <!-- Main Control Buttons -->
+            <div class="player-controls-row">
+              <button class="ctrl-btn" id="btnPlayerShuffle" title="Shuffle Queue">
+                <svg viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+              </button>
+              <button class="ctrl-btn" id="btnPlayerPrev" title="Previous Track (or Restart Track)">
+                <svg viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
+              </button>
+              <button class="ctrl-btn" id="btnPlayerRewind" title="Rewind 15 Seconds">
+                <svg viewBox="0 0 24 24"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
+                <span class="btn-micro-label">-15</span>
+              </button>
+              <button class="ctrl-btn play-pulse-btn" id="btnPlayerPlayPause" title="Play / Pause">
+                <svg viewBox="0 0 24 24" id="playerPlayPauseIcon"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </button>
+              <button class="ctrl-btn" id="btnPlayerForward" title="Forward 15 Seconds">
+                <svg viewBox="0 0 24 24"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>
+                <span class="btn-micro-label">+15</span>
+              </button>
+              <button class="ctrl-btn" id="btnPlayerSkip" title="Skip to Next Track">
+                <svg viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+              </button>
+              <button class="ctrl-btn" id="btnPlayerLoop" title="Loop Mode (Off / Track / Queue)">
+                <svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                <span class="loop-badge" id="playerLoopBadge">OFF</span>
+              </button>
+            </div>
+
+            <!-- Volume and Extras -->
+            <div class="player-secondary-row">
+              <button class="ctrl-btn-sm" id="btnPlayerFavorite" title="Add to Favorites">
+                <svg viewBox="0 0 24 24" id="favIcon"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+              </button>
+              <div class="volume-slider-box">
+                <button class="vol-icon-btn" id="btnPlayerMute">
+                  <svg viewBox="0 0 24 24" id="volIcon"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                </button>
+                <input type="range" min="0" max="100" value="85" class="vol-slider" id="playerVolumeSlider">
+              </div>
+              <button class="btn btn-sm btn-outline" id="btnPlayerAddToPlaylist">+ Playlist</button>
+              <button class="btn btn-sm btn-outline" id="btnPlayerAddToLib">+ Library</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 5: QUEUE -->
+      <section class="screen-view" id="screen-queue">
         <div class="view-header">
           <div>
-            <h1 class="view-title">Your Library</h1>
-            <p class="view-subtitle">Your playlists — imported and custom</p>
+            <h1>Up Next Queue</h1>
+            <p class="view-sub">Manage upcoming tracks, reorder, or save as a playlist.</p>
           </div>
-          <div class="view-actions">
-            <button class="ghost-btn" id="btn-open-create-playlist">+ Create Playlist</button>
-            <button class="primary-btn" id="btn-open-import-dialog">+ Import Playlist</button>
-          </div>
-        </div>
-
-        <!-- Liked Songs Card -->
-        <div class="liked-songs-card" id="liked-songs-card" onclick="window.__openLikedSongs()">
-          <div class="liked-songs-icon">❤️</div>
-          <div class="liked-songs-info">
-            <div class="liked-songs-title">Liked Songs</div>
-            <div class="liked-songs-count" id="liked-songs-count">0 songs</div>
+          <div class="header-actions">
+            <select class="select-sort server-session-select" id="queueServerSelect" title="Select Active Discord Server Session" style="display: none; padding: 6px 12px; font-size: 0.8rem;"></select>
+            <button class="btn btn-secondary" id="btnQueueShuffle">🔀 Shuffle</button>
+            <button class="btn btn-secondary" id="btnQueueSavePlaylist">💾 Save as Playlist</button>
+            <button class="btn btn-danger" id="btnQueueClear">🗑️ Clear Queue</button>
           </div>
         </div>
 
-        <!-- Custom Playlists Section -->
-        <div class="playlist-section-header" id="custom-playlists-header" style="display:none;">
-          <h3 class="playlist-section-title">My Playlists</h3>
-        </div>
-        <div class="playlist-library-grid" id="custom-playlists-grid"></div>
+        <div class="queue-content-box">
+          <div class="queue-section-label">CURRENTLY PLAYING</div>
+          <div class="queue-current-card" id="queueCurrentCard">
+            <span class="empty-text">No track currently active.</span>
+          </div>
 
-        <!-- Imported Playlists Section -->
-        <div class="playlist-section-header" id="imported-playlists-header" style="display:none;">
-          <h3 class="playlist-section-title">Imported</h3>
-        </div>
-        <div class="playlist-library-grid" id="imported-playlists-grid"></div>
-
-        <!-- Empty state (shown when no playlists at all) -->
-        <div id="playlists-empty-state" style="display:none;">
-          <div class="empty-state">
-            <div class="es-icon">🎶</div>
-            <div class="es-text">No playlists yet</div>
-            <div class="es-sub">Create a custom playlist or import from Spotify/YouTube.</div>
+          <div class="queue-section-label">UPCOMING TRACKS (<span id="queueCountLabel">0</span>)</div>
+          <div class="queue-list" id="queueList">
+            <!-- Dynamically populated queue items -->
           </div>
         </div>
       </section>
 
-      <!-- ── PLAYLIST DETAIL VIEW ── -->
-      <section class="view" id="view-playlist-detail">
-        <div class="playlist-detail-header" id="playlist-detail-header">
-          <button class="ghost-btn" id="btn-back-to-playlists">← Back to Playlists</button>
-          <div class="playlist-header-content">
-            <div class="playlist-header-cover">
-              <img class="playlist-cover-img" id="playlist-cover-img" src="" alt="Playlist cover" />
-              <div class="playlist-cover-placeholder" id="playlist-cover-placeholder">🎶</div>
-            </div>
-            <div class="playlist-header-info">
-              <h1 class="playlist-name" id="playlist-detail-name">Playlist Name</h1>
-              <div class="playlist-meta">
-                <span class="playlist-track-count" id="playlist-detail-count">0 tracks</span>
-                <span class="playlist-source-badge" id="playlist-detail-source">spotify</span>
-              </div>
-              <div class="playlist-header-actions">
-                <button class="primary-btn playlist-play-all-btn" id="btn-playlist-play-all">▶ Play All</button>
-                <button class="ghost-btn" id="btn-playlist-queue-all">+ Queue All</button>
-                <button class="ghost-btn playlist-remove-btn" id="btn-playlist-remove" title="Remove Playlist">🗑 Remove</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Sort & View Controls -->
-        <div class="playlist-controls-bar">
-          <div class="playlist-sort-wrap">
-            <label class="playlist-sort-label" for="playlist-sort-select">Sort by:</label>
-            <select class="playlist-sort-select" id="playlist-sort-select">
-              <option value="custom">Custom Order</option>
-              <option value="title">Title</option>
-              <option value="artist">Artist</option>
-              <option value="album">Album</option>
-              <option value="recentlyAdded">Recently Added</option>
-              <option value="duration">Duration</option>
-            </select>
-          </div>
-          <div class="playlist-view-toggle" id="playlist-view-toggle">
-            <button class="view-toggle-btn active" data-mode="list" id="btn-view-list">List</button>
-            <button class="view-toggle-btn" data-mode="compact" id="btn-view-compact">Compact</button>
-          </div>
-        </div>
-
-        <!-- Track List (scrollable) -->
-        <div class="playlist-track-list" id="playlist-track-list">
-          <!-- Track rows rendered by JS -->
-        </div>
-      </section>
-
-      <!-- ── PLAYLIST IMPORT DIALOG (modal) ── -->
-      <div class="modal-overlay" id="playlist-import-modal" style="display: none;">
-        <div class="modal-card">
-          <div class="modal-header">
-            <h2>Import Playlist</h2>
-            <button class="modal-close" id="btn-close-import-modal">✕</button>
-          </div>
-          <div class="modal-body">
-            <p>Paste a public Spotify or YouTube playlist URL below to import it.</p>
-            <div class="playlist-import-field" style="margin-top: 16px;">
-              <input
-                type="text"
-                class="field-input"
-                id="playlist-import-url"
-                placeholder="https://open.spotify.com/playlist/... or https://youtube.com/playlist?list=..."
-                autocomplete="off"
-              />
-              <div class="playlist-import-source-badge" id="playlist-import-source-badge" style="display:none;">
-                <span id="playlist-import-source-text"></span>
-              </div>
-            </div>
-            <div class="playlist-import-feedback" id="playlist-import-feedback" style="margin-top: 8px; font-size: 12px;"></div>
-          </div>
-          <div class="modal-footer">
-            <button class="ghost-btn" id="btn-cancel-import">Cancel</button>
-            <button class="primary-btn" id="btn-confirm-import">Import</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── CREATE PLAYLIST DIALOG (modal) ── -->
-      <div class="modal-overlay" id="create-playlist-modal" style="display: none;">
-        <div class="modal-card">
-          <div class="modal-header">
-            <h2>Create Playlist</h2>
-            <button class="modal-close" id="btn-close-create-modal">✕</button>
-          </div>
-          <div class="modal-body">
-            <div class="field" style="margin-bottom: 16px;">
-              <label class="field-label" for="create-playlist-name">Name *</label>
-              <input
-                type="text"
-                class="field-input"
-                id="create-playlist-name"
-                placeholder="My awesome playlist"
-                autocomplete="off"
-              />
-            </div>
-            <div class="field">
-              <label class="field-label" for="create-playlist-desc">Description (optional)</label>
-              <input
-                type="text"
-                class="field-input"
-                id="create-playlist-desc"
-                placeholder="A short description..."
-                autocomplete="off"
-              />
-            </div>
-            <div class="create-playlist-feedback" id="create-playlist-feedback" style="margin-top: 8px; font-size: 12px;"></div>
-          </div>
-          <div class="modal-footer">
-            <button class="ghost-btn" id="btn-cancel-create-playlist">Cancel</button>
-            <button class="primary-btn" id="btn-confirm-create-playlist">Create</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── SETTINGS ── -->
-      <section class="view" id="view-settings">
+      <!-- SCREEN 6: LIBRARY -->
+      <section class="screen-view" id="screen-library">
         <div class="view-header">
-          <h1 class="view-title">Settings</h1>
-        </div>
-
-        <!-- Essential: Discord Server & Channel -->
-        <div class="settings-card">
-          <h2 class="settings-section">🎵 Discord Server</h2>
-
-          <div class="field">
-            <label class="field-label">Invite Bot to Your Server</label>
-            <button class="primary-btn" id="btn-invite-bot" style="width:100%;">🔗 Add Bot to Discord Server</button>
-            <span class="field-hint">Opens Discord in your browser to add the bot to your server. Do this first if the bot isn't in your server yet.</span>
+          <div>
+            <h1>Personal Music Library</h1>
+            <p class="view-sub"><span id="libCountLabel">0</span> / 300 songs stored locally and synchronized across Scify Music.</p>
           </div>
-
-          <div class="field" style="margin-top: 16px;">
-            <label class="field-label" for="set-guild-id">Server</label>
-            <div class="field-row" style="display: flex; gap: 8px;">
-              <input class="field-input" id="set-guild-id" type="text" placeholder="Auto-detected on first launch" />
-              <button class="ghost-btn" id="btn-load-guilds">Load Servers</button>
-            </div>
-            <div id="guild-list" class="guild-chips"></div>
-            <span class="field-hint">Click "Load Servers" after inviting the bot. Auto-detected if the bot is in one server.</span>
-          </div>
-
-          <div class="field">
-            <label class="field-label" for="set-channel-id">Voice Channel</label>
-            <div class="field-row" style="display: flex; gap: 8px;">
-              <input class="field-input" id="set-channel-id" type="text" placeholder="Auto-detected on first launch" />
-              <button class="ghost-btn" id="btn-load-channels">Load Channels</button>
-            </div>
-            <div id="channel-list" class="guild-chips"></div>
-            <span class="field-hint">The voice channel the bot will join when you play music.</span>
+          <div class="header-actions">
+            <button class="btn btn-primary" id="btnLibPlayAll">▶ Play All</button>
+            <button class="btn btn-secondary" id="btnLibAddSong">+ Add Song</button>
           </div>
         </div>
 
-        <!-- Preferences -->
-        <div class="settings-card">
-          <h2 class="settings-section">⚡ Preferences</h2>
-
-          <div class="field">
-            <label class="toggle-row">
-              <span>Auto-start bot when app opens</span>
-              <label class="toggle">
-                <input type="checkbox" id="set-auto-start-bot" />
-                <span class="toggle-slider"></span>
-              </label>
-            </label>
-          </div>
-
-          <div class="field">
-            <label class="toggle-row">
-              <span>Auto-join voice channel on startup</span>
-              <label class="toggle">
-                <input type="checkbox" id="set-auto-join-vc" />
-                <span class="toggle-slider"></span>
-              </label>
-            </label>
-          </div>
-
-          <div class="field">
-            <label class="toggle-row">
-              <span>Show what you're listening to in Discord</span>
-              <label class="toggle">
-                <input type="checkbox" id="set-rich-presence" />
-                <span class="toggle-slider"></span>
-              </label>
-            </label>
-            <span class="field-hint">Discord Rich Presence — your profile shows "Listening to Scify Music".</span>
-          </div>
+        <div class="filter-bar">
+          <input type="text" class="input-filter" id="libSearchFilter" placeholder="Filter library songs…">
+          <select class="select-sort" id="libSortSelect">
+            <option value="recent">Recently Added</option>
+            <option value="title">Song Title (A-Z)</option>
+            <option value="duration">Duration</option>
+          </select>
         </div>
 
-        <!-- Spotify -->
-        <div class="settings-card">
-          <h2 class="settings-section">🟢 Spotify Sync</h2>
-          
-          <div class="field">
-            <label class="field-label" for="set-spotify-interval">Auto-Sync Interval</label>
-            <select class="field-input" id="set-spotify-interval" style="background: var(--bg-base); border: 1px solid var(--border); color: var(--text-primary);">
-              <option value="6">Every 6 Hours</option>
-              <option value="12">Every 12 Hours</option>
-              <option value="24" selected>Every 24 Hours (Daily)</option>
-              <option value="48">Every 48 Hours</option>
-            </select>
-          </div>
-          
-          <div class="field">
-            <div class="spotify-sync-meta" style="font-size: 12px; color: var(--text-secondary);">
-              <span>Last synced: <strong id="spotify-last-sync-time">Never</strong></span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Bot Logs -->
-        <div class="settings-card" style="max-width: 800px;">
-          <h2 class="settings-section">📋 Bot Console</h2>
-          <div class="field">
-            <textarea class="log-viewer" id="bot-log-viewer" readonly placeholder="Bot logs will appear here when running..." style="width: 100%; height: 160px; background: #08080a; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; color: #22c55e; font-family: monospace; font-size: 11px; line-height: 1.4; resize: vertical; overflow-y: auto; outline: none;"></textarea>
-            <div class="field-row" style="margin-top: 8px; display: flex; gap: 8px;">
-              <button class="primary-btn" id="btn-start-bot-process">Start Bot</button>
-              <button class="ghost-btn" id="btn-stop-bot-process">Stop Bot</button>
-              <button class="ghost-btn" id="btn-clear-logs">Clear Logs</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Advanced (collapsed by default) -->
-        <div class="settings-card">
-          <h2 class="settings-section" style="cursor: pointer;" onclick="document.getElementById('advanced-settings').style.display = document.getElementById('advanced-settings').style.display === 'none' ? 'block' : 'none'">
-            🔧 Advanced <span style="font-size: 11px; color: var(--text-secondary);">(VPS / power users — click to expand)</span>
-          </h2>
-          <div id="advanced-settings" style="display: none;">
-            <div class="field">
-              <label class="field-label" for="set-api-url">Bot API URL</label>
-              <input class="field-input" id="set-api-url" type="text" placeholder="http://127.0.0.1:3456" />
-              <span class="field-hint">Only change if the bot runs on a remote server.</span>
-            </div>
-
-            <div class="field">
-              <label class="field-label" for="set-api-secret">API Secret</label>
-              <input class="field-input" id="set-api-secret" type="password" placeholder="Leave empty for local use" />
-              <span class="field-hint">Only needed if API_SECRET is set in the bot's .env.</span>
-            </div>
-
-            <div class="field">
-              <label class="field-label" for="set-bot-folder">Bot Directory</label>
-              <input class="field-input" id="set-bot-folder" type="text" placeholder="Auto-detected" />
-              <span class="field-hint">Path to the directory containing bot.js.</span>
-            </div>
-
-            <div class="field" style="margin-top: 16px;">
-              <h3 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">📺 YouTube Authentication (VPS only)</h3>
-              <div class="yt-auth-status-container" style="display: flex; align-items: center; gap: 8px; font-size: 13px; margin-bottom: 4px;">
-                <span style="color: var(--text-secondary);">Status:</span>
-                <span class="yt-auth-badge" id="yt-auth-status-badge" style="font-weight: 700; color: #a1a1aa; padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.06); font-size: 11px;">Checking…</span>
-              </div>
-              <span class="field-hint">Only needed on VPS/datacenter IPs where YouTube blocks requests. Not needed on home PCs.</span>
-              <div class="field-row" style="margin-top: 8px; display: flex; gap: 8px;">
-                <button class="ghost-btn" id="btn-yt-login">Login with YouTube</button>
-                <button class="ghost-btn" id="btn-yt-logout" style="display:none">Clear Auth</button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-footer">
-          <button class="primary-btn" id="btn-save-settings">Save Settings</button>
-          <span class="save-msg" id="save-msg"></span>
-          <div class="connection-test" id="connection-test-area"></div>
+        <div class="tracks-table" id="libTracksTable">
+          <!-- Dynamically populated -->
         </div>
       </section>
 
+      <!-- SCREEN 7: PLAYLISTS -->
+      <section class="screen-view" id="screen-playlists">
+        <div class="view-header">
+          <div>
+            <h1>Playlists</h1>
+            <p class="view-sub">Create, organize, and import Spotify playlists.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-discord" id="btnPlaylistsImportSpotify">🟢 Import Spotify Playlist</button>
+            <button class="btn btn-primary" id="btnPlaylistsCreate">+ Create Playlist</button>
+          </div>
+        </div>
+
+        <div class="cards-grid" id="playlistsGrid">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+      <!-- SCREEN 8: FAVORITES -->
+      <section class="screen-view" id="screen-favorites">
+        <div class="view-header">
+          <div>
+            <h1>Favorites</h1>
+            <p class="view-sub">Your starred tracks for quick listening.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary" id="btnFavoritesPlayAll">▶ Play Favorites</button>
+          </div>
+        </div>
+
+        <div class="tracks-table" id="favoritesTable">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+      <!-- SCREEN 9: HISTORY -->
+      <section class="screen-view" id="screen-history">
+        <div class="view-header">
+          <div>
+            <h1>Playback History</h1>
+            <p class="view-sub">Recent songs played via Desktop and Discord bot.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary" id="btnHistoryPlayAll">▶ Play Recent</button>
+            <button class="btn btn-danger" id="btnHistoryClear">Clear History</button>
+          </div>
+        </div>
+
+        <div class="tracks-table" id="historyTable">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+      <!-- SCREEN 10: ADD TO DISCORD (OAuth2 Installation Center) -->
+      <section class="screen-view" id="screen-add-discord">
+        <div class="discord-install-card">
+          <div class="install-header">
+            <div class="discord-avatar-large">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z"/>
+              </svg>
+            </div>
+            <div>
+              <h1 class="install-bot-name">Sruti Discord Bot</h1>
+              <p class="install-bot-tag">Official OAuth2 Bot Integration</p>
+            </div>
+          </div>
+
+          <div class="install-banner">
+            <h3>Add Sruti to Your Discord Server</h3>
+            <p>One-click install. Pick your server from the Discord popup, click Authorize, and start playing music with <code>/play</code>!</p>
+            
+            <div class="install-btn-group">
+              <button class="btn btn-discord btn-xl" id="btnLaunchDiscordOAuth">
+                <svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z"/>
+                </svg>
+                <span>Add Sruti to Discord</span>
+              </button>
+              <button class="btn btn-secondary btn-lg" id="btnCopyInviteLink">📋 Copy Link</button>
+            </div>
+          </div>
+
+          <!-- Feature Grid -->
+          <div class="install-info-grid">
+            <div class="info-card">
+              <h4>🔐 Required Permissions</h4>
+              <ul>
+                <li><strong>Connect</strong> &amp; <strong>Speak</strong> in Voice Channels</li>
+                <li><strong>Send Messages</strong> &amp; <strong>Embed Links</strong></li>
+                <li><strong>Use Slash Commands</strong> (applications.commands)</li>
+                <li><strong>Server Members Intent</strong> (role checking)</li>
+              </ul>
+            </div>
+            <div class="info-card">
+              <h4>⚡ Available Slash Commands</h4>
+              <ul>
+                <li><code>/play &lt;query&gt;</code> — Play YouTube or search</li>
+                <li><code>/controls</code> — Personal interactive control panel</li>
+                <li><code>/queue</code> — Interactive queue with jumps</li>
+                <li><code>/history</code> &amp; <code>/library</code> — Shared libraries</li>
+                <li><code>/status</code> &amp; <code>/restart</code> — System commands</li>
+              </ul>
+            </div>
+            <div class="info-card">
+              <h4>🛡️ Administrator Notice</h4>
+              <p>To authorize this bot on a Discord server, you must have the <strong>Manage Server</strong> or <strong>Administrator</strong> permission in that server.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 11: DISCORD SERVERS & VOICE -->
+      <section class="screen-view" id="screen-discord-servers">
+        <div class="view-header">
+          <div>
+            <h1>Connected Discord Servers</h1>
+            <p class="view-sub">Select a server and voice channel to stream music from desktop.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" id="btnRefreshGuilds">🔄 Refresh</button>
+            <button class="btn btn-discord" id="btnServersAddDiscord">+ Add to Server</button>
+          </div>
+        </div>
+
+        <div class="discord-servers-container" id="discordServersList">
+          <!-- Dynamically populated guilds and voice channels -->
+        </div>
+      </section>
+
+      <!-- SCREEN 12: DISCORD CONTROL PANELS SIMULATOR -->
+      <section class="screen-view" id="screen-discord-simulator">
+        <div class="view-header">
+          <div>
+            <h1>Discord Control Panel Simulator</h1>
+            <p class="view-sub">Preview how the in-Discord interactive `/controls` embed and buttons appear to users.</p>
+          </div>
+          <div class="header-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <select class="select-sort" id="panelServerSelect" style="min-width: 170px;" title="Select Discord Server"></select>
+            <select class="select-sort" id="panelChannelSelect" style="min-width: 170px;" title="Select Text Channel"></select>
+            <button class="btn btn-primary" id="btnBroadcastPanelToDiscord">🚀 Send Panel to Channel</button>
+          </div>
+        </div>
+
+        <div class="discord-simulator-stage">
+          <div class="discord-chat-frame">
+            <div class="discord-message">
+              <div class="discord-bot-avatar">SR</div>
+              <div class="discord-msg-content">
+                <div class="discord-msg-author">Sruti <span class="bot-tag">BOT</span> <span class="time-stamp">Today at 8:30 PM</span></div>
+                
+                <!-- Simulated Discord Embed -->
+                <div class="sim-embed">
+                  <div class="sim-embed-bar"></div>
+                  <div class="sim-embed-body">
+                    <h4 class="sim-title" id="simTrackTitle">Nothing is playing</h4>
+                    <p class="sim-desc" id="simTrackDesc">Use <code>/play</code> or the desktop application to start music.</p>
+                    
+                    <div class="sim-fields">
+                      <div class="sim-field">
+                        <span class="sim-field-name">Requested by</span>
+                        <span class="sim-field-val" id="simRequestedBy">Desktop</span>
+                      </div>
+                      <div class="sim-field">
+                        <span class="sim-field-name">Loop</span>
+                        <span class="sim-field-val" id="simLoopVal">➡️ No loop</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Simulated Discord Button Rows -->
+                <div class="sim-button-rows">
+                  <div class="sim-row">
+                    <button class="sim-btn">⏮️ Prev</button>
+                    <button class="sim-btn">⏪ -15s</button>
+                    <button class="sim-btn sim-btn-primary">▶️ Play</button>
+                    <button class="sim-btn">⏩ +15s</button>
+                    <button class="sim-btn">⏭️ Skip</button>
+                  </div>
+                  <div class="sim-row">
+                    <button class="sim-btn sim-btn-danger">⏹️ Stop</button>
+                    <button class="sim-btn">🔀 Shuffle</button>
+                    <button class="sim-btn">🔁 Loop</button>
+                    <button class="sim-btn">⏱️ Seek</button>
+                    <button class="sim-btn">🔄 Refresh</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 13: SETTINGS -->
+      <section class="screen-view" id="screen-settings">
+        <div class="view-header">
+          <div>
+            <h1>Application Settings</h1>
+            <p class="view-sub">Manage credentials, audio quality, theme accents, and bot behavior.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-primary" id="btnSaveSettings">💾 Save Configuration</button>
+          </div>
+        </div>
+
+        <div class="settings-grid">
+          <!-- Credentials Section -->
+          <div class="settings-card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <h3 style="margin-bottom: 0;">Discord Bot Credentials</h3>
+              <span id="badgeTokenProtection" class="badge badge-success" style="font-size: 0.72rem; padding: 3px 8px; display: inline-flex; align-items: center; gap: 4px;">
+                🔒 AES-256 Protected
+              </span>
+            </div>
+            <p class="card-desc" id="tokenProtectionDesc">Official bot credentials are encrypted in a secure vault. Your token is never exposed in plain text.</p>
+            
+            <div class="form-group">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="margin-bottom: 0;">Discord Bot Token</label>
+                <button type="button" class="btn-link" id="btnSwitchCustomToken" style="font-size: 0.76rem; color: var(--accent-color);">Enter Custom Token</button>
+              </div>
+              <div class="input-password-wrapper">
+                <input type="password" id="cfgDiscordToken" placeholder="Official Encrypted Token Active" readonly>
+                <button class="btn-eye" id="btnToggleToken" title="Toggle visibility">👁️</button>
+              </div>
+              <span class="sub-label" id="tokenFieldHint" style="font-size: 0.74rem; color: #94a3b8; display: block; margin-top: 4px;">Using official Sruti bot instance.</span>
+            </div>
+
+            <div class="form-group">
+              <label>Application / Client ID (Optional for OAuth2)</label>
+              <input type="text" id="cfgClientId" placeholder="Auto-derived if left empty">
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Access Role ID (Optional)</label>
+                <input type="text" id="cfgAccessRole" placeholder="Allow all if blank">
+              </div>
+              <div class="form-group">
+                <label>Priority Role ID (Optional)</label>
+                <input type="text" id="cfgPriorityRole" placeholder="Lock disabled if blank">
+              </div>
+            </div>
+
+            <div class="bot-control-box">
+              <button class="btn btn-success" id="btnSettingsStartBot">▶ Start Bot</button>
+              <button class="btn btn-danger" id="btnSettingsStopBot">⏹ Stop Bot</button>
+              <button class="btn btn-secondary" id="btnSettingsRestartBot">🔄 Restart Bot</button>
+            </div>
+          </div>
+
+          <!-- Audio & Playback -->
+          <div class="settings-card">
+            <h3>Audio & Playback</h3>
+            <div class="form-group">
+              <label>Streaming Audio Quality</label>
+              <select id="cfgAudioQuality">
+                <option value="high">High Fidelity (320 kbps Opus)</option>
+                <option value="normal" selected>Balanced (192 kbps Opus)</option>
+                <option value="saver">Eco / Data Saver (128 kbps Opus)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Equalizer Preset</label>
+              <select id="cfgEqPreset">
+                <option value="flat">Flat / Natural</option>
+                <option value="bass">Bass Boost 🔥</option>
+                <option value="vocal">Vocal Clarity</option>
+                <option value="electronic">Electronic / Synth</option>
+              </select>
+            </div>
+
+            <div class="checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="cfgNormalizeVolume" checked>
+                <span>Volume Normalization (ReplayGain)</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="cfgDesktopNotifications" checked>
+                <span>Desktop Song Notifications</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="cfgMinimizeTray" checked>
+                <span>Minimize to System Tray on close</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Theme Accent Colors -->
+          <div class="settings-card">
+            <h3>Theme & Accent Customization</h3>
+            <p class="card-desc">Choose your cyberpunk neon glow palette.</p>
+            <div class="accent-palette">
+              <button class="accent-swatch active" data-color="#00f0ff" style="background: #00f0ff;" title="Neon Cyan"></button>
+              <button class="accent-swatch" data-color="#9d4edd" style="background: #9d4edd;" title="Cyber Violet"></button>
+              <button class="accent-swatch" data-color="#00ff88" style="background: #00ff88;" title="Matrix Emerald"></button>
+              <button class="accent-swatch" data-color="#ff9e00" style="background: #ff9e00;" title="Sunset Amber"></button>
+              <button class="accent-swatch" data-color="#ff007f" style="background: #ff007f;" title="Electric Pink"></button>
+            </div>
+          </div>
+
+          <!-- YouTube Proxy & Spotify -->
+          <div class="settings-card">
+            <h3>Proxy & Spotify Metadata API</h3>
+            <div class="form-group">
+              <label>YouTube Proxy URL (Optional)</label>
+              <input type="text" id="cfgYtProxy" placeholder="socks5://user:pass@host:port">
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Spotify Client ID (Optional)</label>
+                <input type="text" id="cfgSpotifyId" placeholder="For playlist imports">
+              </div>
+              <div class="form-group">
+                <label>Spotify Client Secret (Optional)</label>
+                <input type="password" id="cfgSpotifySecret" placeholder="••••••••">
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Bot Terminal Logs -->
+          <div class="settings-card full-width">
+            <div class="section-header">
+              <h3>Live Discord Bot Logs</h3>
+              <button class="btn btn-sm btn-secondary" id="btnClearLogs">Clear Console</button>
+            </div>
+            <div class="log-console" id="logConsole">
+              <div class="log-line">[Scify Core] Desktop application launched. Waiting for bot actions…</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 14: STATISTICS -->
+      <section class="screen-view" id="screen-statistics">
+        <div class="view-header">
+          <div>
+            <h1>Ecosystem Statistics</h1>
+            <p class="view-sub">Real-time usage insights, audio diagnostics, and streaming metrics across Sruti.</p>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary" id="btnRefreshStats">🔄 Refresh Analytics</button>
+          </div>
+        </div>
+
+        <div class="stats-overview-grid">
+          <div class="stat-card">
+            <div class="stat-card-icon stat-icon-cyan">
+              <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            </div>
+            <div class="stat-card-info">
+              <span class="stat-label">TOTAL TRACKS PLAYED</span>
+              <h2 class="stat-value" id="statSongsPlayed">0</h2>
+              <span class="stat-trend">⚡ Streaming Activity</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-icon stat-icon-emerald">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div class="stat-card-info">
+              <span class="stat-label">TOTAL LISTENING TIME</span>
+              <h2 class="stat-value" id="statListeningTime">0h 0m</h2>
+              <span class="stat-trend">🎧 Continuous Audio</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-icon stat-icon-purple">
+              <svg viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+            </div>
+            <div class="stat-card-info">
+              <span class="stat-label">DISCORD SERVERS</span>
+              <h2 class="stat-value" id="statServersCount">0</h2>
+              <span class="stat-trend">🌐 Connected Guilds</span>
+            </div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-icon stat-icon-amber">
+              <svg viewBox="0 0 24 24"><path d="m16 6 4 14M12 6v14M8 8v12M4 4v16"/></svg>
+            </div>
+            <div class="stat-card-info">
+              <span class="stat-label">PERSONAL LIBRARY</span>
+              <h2 class="stat-value" id="statLibraryCount">0</h2>
+              <span class="stat-trend">📚 Saved Local Tracks</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="stats-insights-row">
+          <div class="stats-box stats-box-wide">
+            <div class="stats-box-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.2rem;">🔥</span>
+                <h3 style="margin-bottom: 0;">Top Played Tracks</h3>
+              </div>
+              <span class="badge badge-cyan">All-Time Leaderboard</span>
+            </div>
+            <div class="tracks-table" id="statsTopTracksTable">
+              <!-- Dynamically populated in app.js -->
+            </div>
+          </div>
+
+          <div class="stats-box stats-box-narrow">
+            <div class="stats-box-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 1.2rem;">⚡</span>
+                <h3 style="margin-bottom: 0;">Engine Diagnostics</h3>
+              </div>
+            </div>
+            <div class="diagnostics-list">
+              <div class="diag-item">
+                <span class="diag-key">Audio Pipeline</span>
+                <span class="diag-val badge badge-success">Opus 48kHz Stereo</span>
+              </div>
+              <div class="diag-item">
+                <span class="diag-key">Discord Gateway</span>
+                <span class="diag-val badge badge-cyan" id="diagPing">Connected</span>
+              </div>
+              <div class="diag-item">
+                <span class="diag-key">Voice Teleportation</span>
+                <span class="diag-val badge badge-purple">Auto-Follow VC</span>
+              </div>
+              <div class="diag-item">
+                <span class="diag-key">Stream Engine</span>
+                <span class="diag-val">yt-dlp + FFmpeg Pipe</span>
+              </div>
+              <div class="diag-item">
+                <span class="diag-key">Token Vault</span>
+                <span class="diag-val badge badge-success">AES-256 Protected</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCREEN 15: ABOUT -->
+      <section class="screen-view" id="screen-about">
+        <div class="about-container">
+          <div class="about-hero-card">
+            <div class="about-glow-orb"></div>
+            
+            <div class="about-brand-header">
+              <!-- Dedicated container for user's logo -->
+              <div class="about-logo-wrapper" id="aboutLogoWrapper">
+                <img id="aboutLogoImg" class="about-brand-logo" src="assets/logo.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" alt="Sruti Logo">
+                <div class="about-logo-placeholder">
+                  <svg viewBox="0 0 24 24" class="about-svg-icon">
+                    <circle cx="12" cy="12" r="10" stroke="var(--accent-color)" stroke-width="2" fill="none"/>
+                    <polygon points="10 8 16 12 10 16 10 8" fill="var(--accent-color)"/>
+                  </svg>
+                </div>
+              </div>
+
+              <div class="about-title-group">
+                <div class="about-badge-row">
+                  <span class="badge badge-cyan">v2.0.0 Production</span>
+                  <span class="badge badge-purple">Ultra-Fidelity Audio</span>
+                  <span class="badge badge-success">Online &amp; Ready</span>
+                </div>
+                <h1 class="about-app-title">Sruti</h1>
+                <p class="about-tagline">Advanced Windows Music Player &amp; Discord Bot Ecosystem</p>
+              </div>
+            </div>
+
+            <div class="about-divider"></div>
+
+            <p class="about-description">
+              <strong>Sruti</strong> is a high-performance audio ecosystem built for audiophiles and Discord communities. It combines a sleek, native Windows desktop player with zero-latency Discord voice streaming powered by yt-dlp, FFmpeg, and native Opus pipelines.
+            </p>
+
+            <div class="about-pillars-grid">
+              <div class="pillar-card">
+                <div class="pillar-icon">⚡</div>
+                <h4>Instant Track Switching</h4>
+                <p>Zero buffer lag with hardware-accelerated streams and smooth audio handoff.</p>
+              </div>
+
+              <div class="pillar-card">
+                <div class="pillar-icon">🎙️</div>
+                <h4>Dual Playback Engine</h4>
+                <p>Seamlessly toggle between local desktop listening and Discord VC transmission.</p>
+              </div>
+
+              <div class="pillar-card">
+                <div class="pillar-icon">🔒</div>
+                <h4>Encrypted Vault</h4>
+                <p>Military-grade AES-256 credential storage protects your bot and API tokens.</p>
+              </div>
+
+              <div class="pillar-card">
+                <div class="pillar-icon">🎨</div>
+                <h4>Dynamic Neon Accents</h4>
+                <p>Fully customizable cyberpunk themes tailored for your visual experience.</p>
+              </div>
+            </div>
+
+            <div class="about-footer-actions">
+              <button class="btn btn-discord btn-lg" id="btnAboutAddDiscord">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994.021-.041.001-.09-.041-.106a13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.929 1.793 8.18 1.793 12.061 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.894.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028z"/></svg>
+                <span>Add Sruti to Discord</span>
+              </button>
+              <button class="btn btn-secondary btn-lg" id="btnAboutOpenSettings">⚙️ Open Settings</button>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
-  <!-- Now Playing mini-bar (always visible at the bottom) -->
-  <div class="mini-bar" id="mini-bar">
-    <div class="mini-art">
-      <img id="mini-art-img" src="" alt="" />
-      <div class="mini-art-placeholder">🎵</div>
+  <!-- PERSISTENT BOTTOM PLAYER BAR -->
+  <footer class="app-player-bar">
+    <!-- Left: Track info -->
+    <div class="bar-track-col">
+      <img src="" alt="" class="bar-artwork" id="barArtwork">
+      <div class="bar-art-placeholder" id="barArtPlaceholder">🎵</div>
+      <div class="bar-titles">
+        <span class="bar-title" id="barTitle">No song playing</span>
+        <span class="bar-artist" id="barArtist">Select a track to play</span>
+      </div>
+      <button class="btn-fav-star" id="btnBarFavorite" title="Add to favorites">
+        <svg viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+      </button>
     </div>
-    <div class="mini-info">
-      <div class="mini-title" id="mini-title">Not connected</div>
-      <div class="mini-sub" id="mini-sub">—</div>
-    </div>
-    <div class="mini-controls">
-      <button class="mini-btn like-btn" id="mini-like-btn" title="Like" onclick="window.__toggleNowPlayingLike()">🤍</button>
-      <button class="mini-btn" id="mini-back" title="Back 15s">⏮</button>
-      <button class="mini-btn mini-play" id="mini-playpause" title="Play/Pause">▶</button>
-      <button class="mini-btn" id="mini-skip" title="Skip">⏭</button>
-    </div>
-    <div class="mini-progress">
-      <div class="mini-progress-fill" id="mini-progress-fill"></div>
-    </div>
-  </div>
 
-  <!-- YouTube Device Login Modal -->
-  <div class="modal-overlay" id="yt-auth-modal" style="display: none;">
+    <!-- Center: Playback Controls & Progress Bar -->
+    <div class="bar-controls-col">
+      <div class="bar-buttons">
+        <button class="bar-btn" id="btnBarShuffle" title="Shuffle">
+          <svg viewBox="0 0 24 24"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+        </button>
+        <button class="bar-btn" id="btnBarPrev" title="Previous Track">
+          <svg viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
+        </button>
+        <button class="bar-btn" id="btnBarBack15" title="Rewind 15s">
+          <svg viewBox="0 0 24 24"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
+        </button>
+        <button class="bar-btn bar-play-btn" id="btnBarPlayPause" title="Play / Pause">
+          <svg viewBox="0 0 24 24" id="barPlayPauseIcon"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <button class="bar-btn" id="btnBarFwd15" title="Forward 15s">
+          <svg viewBox="0 0 24 24"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>
+        </button>
+        <button class="bar-btn" id="btnBarSkip" title="Skip Track">
+          <svg viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+        </button>
+        <button class="bar-btn" id="btnBarLoop" title="Loop Mode">
+          <svg viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        </button>
+        <button class="bar-btn" id="btnBarStop" title="Stop">
+          <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg>
+        </button>
+      </div>
+
+      <div class="bar-progress-box">
+        <span class="time-label" id="barTimeCurrent">0:00</span>
+        <div class="bar-scrubber" id="barScrubber">
+          <div class="bar-scrubber-fill" id="barScrubberFill" style="width: 0%;"></div>
+        </div>
+        <span class="time-label" id="barTimeTotal">0:00</span>
+      </div>
+    </div>
+
+    <!-- Right: Volume & Target -->
+    <div class="bar-volume-col">
+      <div class="mini-target-pill active" id="barTargetPill" title="Click to toggle Desktop / Discord output">
+        <span class="target-icon">🎙️</span>
+        <span class="target-text">Discord Session</span>
+      </div>
+      <select class="select-sort server-session-select" id="barServerSelect" title="Select Active Discord Server Session" style="display: none; padding: 3px 6px; font-size: 0.72rem; max-width: 140px; border-color: rgba(0, 240, 255, 0.4);"></select>
+      <button class="bar-vol-btn" id="btnBarMute">
+        <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+      </button>
+      <input type="range" min="0" max="100" value="85" class="bar-vol-slider" id="barVolumeSlider">
+    </div>
+  </footer>
+
+  <!-- MODALS -->
+  <!-- Create Playlist Modal -->
+  <div class="modal-overlay" id="modalCreatePlaylist">
     <div class="modal-card">
       <div class="modal-header">
-        <h2>YouTube Device Authentication</h2>
-        <button class="modal-close" id="btn-close-yt-modal">✕</button>
+        <h3>Create New Playlist</h3>
+        <button class="modal-close" data-close="modalCreatePlaylist">&times;</button>
       </div>
       <div class="modal-body">
-        <p>Please authorize this application to stream YouTube audio using your account. This prevents age-restriction blocks and YouTube rate limits.</p>
-        
-        <div class="device-code-box">
-          <div class="device-code-label">Verification Code</div>
-          <div class="device-code-value" id="yt-device-code">XXXX-XXXX</div>
+        <div class="form-group">
+          <label>Playlist Name</label>
+          <input type="text" id="modalPlaylistName" placeholder="My Synthwave Mix" autofocus>
         </div>
-
-        <div class="device-instructions">
-          <p>1. Go to <a class="yt-link" id="yt-device-url" href="#" target="_blank">https://www.google.com/device</a></p>
-          <p>2. Enter the code shown above.</p>
-          <p>3. Confirm permissions in your browser.</p>
-        </div>
-
-        <div class="modal-spinner-row">
-          <div class="spinner"></div>
-          <span>Waiting for you to complete authorization...</span>
+        <div class="form-group">
+          <label>Description (Optional)</label>
+          <input type="text" id="modalPlaylistDesc" placeholder="Best chill sci-fi tracks">
         </div>
       </div>
       <div class="modal-footer">
-        <button class="ghost-btn" id="btn-cancel-yt-auth">Cancel</button>
+        <button class="btn btn-secondary" data-close="modalCreatePlaylist">Cancel</button>
+        <button class="btn btn-primary" id="btnModalSubmitPlaylist">Create</button>
       </div>
     </div>
   </div>
 
-  <script src="playlistSort.js"></script>
-  <script src="playlistRender.js"></script>
-  <script src="playlistPlayback.js"></script>
-  <script src="app.js" type="module"></script>
+  <!-- Spotify Import Modal -->
+  <div class="modal-overlay" id="modalSpotifyImport">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Import Spotify Playlist</h3>
+        <button class="modal-close" data-close="modalSpotifyImport">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Paste any public Spotify playlist URL below. Sruti will resolve high-fidelity streams from YouTube.</p>
+        <div class="form-group">
+          <label>Spotify Playlist URL</label>
+          <input type="text" id="modalSpotifyUrl" placeholder="https://open.spotify.com/playlist/...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modalSpotifyImport">Cancel</button>
+        <button class="btn btn-discord" id="btnModalSubmitSpotify">Import Tracks</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Song to Library Modal -->
+  <div class="modal-overlay" id="modalAddLibSong">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Add Songs to Library</h3>
+        <button class="modal-close" data-close="modalAddLibSong">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Search for a song, enter a YouTube URL, or enter multiple songs separated by commas.</p>
+        <div class="form-group">
+          <label>Song Title, Artist, or YouTube URL</label>
+          <input type="text" id="modalAddLibQuery" placeholder="e.g. Blinding Lights, Interstellar Theme, https://..." autofocus>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-close="modalAddLibSong">Cancel</button>
+        <button class="btn btn-primary" id="btnModalSubmitAddLib">Add to Library</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Playlist Modal -->
+  <div class="modal-overlay" id="modalViewPlaylist">
+    <div class="modal-card" style="width: 580px;">
+      <div class="modal-header">
+        <div>
+          <h3 id="viewPlaylistTitle">Playlist Name</h3>
+          <span class="sub-label" id="viewPlaylistSub">0 tracks</span>
+        </div>
+        <button class="modal-close" data-close="modalViewPlaylist">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+          <button class="btn btn-primary btn-sm" id="btnViewPlaylistPlayAll">▶ Play All in VC</button>
+          <button class="btn btn-secondary btn-sm" id="btnViewPlaylistQueueAll">+ Queue All</button>
+          <button class="btn btn-danger btn-sm" id="btnViewPlaylistDelete" style="margin-left: auto;">🗑️ Delete</button>
+        </div>
+        <div class="tracks-table" id="viewPlaylistTracksList" style="max-height: 340px; overflow-y: auto;">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </div>
+  <!-- Connect Discord User / Auto VC Teleport Modal -->
+  <div class="modal-overlay" id="modalSetUser">
+    <div class="modal-card" style="width: 530px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.4rem;">🚀</span>
+          <div>
+            <h3 style="margin-bottom: 2px;">Identify Commander / Link Voice</h3>
+            <span class="sub-label">Sruti Auto-Follow &amp; VC Teleport</span>
+          </div>
+        </div>
+        <button class="modal-close" data-close="modalSetUser">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc" style="color: #cbd5e1; font-size: 0.88rem; line-height: 1.5; margin-bottom: 14px;">
+          Tell Sruti your Discord username. Whenever you enter the app or move between voice channels, the bot will detect your active voice channel across all connected servers and join you automatically!
+        </p>
+
+        <div class="form-group" style="margin-bottom: 14px;">
+          <label style="font-size: 0.82rem; font-weight: 600; color: #94a3b8; display: block; margin-bottom: 6px;">Your Discord Username or Display Name</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="modalInputDiscordUser" placeholder="e.g. CyberDJ or MusicLover123" style="flex: 1; padding: 10px 14px; font-size: 0.9rem; background: rgba(10, 13, 20, 0.85); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 8px; color: #fff;" autofocus>
+            <button class="btn btn-primary" id="btnModalTeleportVc" style="white-space: nowrap; padding: 10px 16px;">⚡ Teleport Bot to My VC</button>
+          </div>
+        </div>
+
+        <div id="modalVoiceDetectionArea" style="margin-top: 10px;">
+          <label style="font-size: 0.76rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.6px; display: block; margin-bottom: 6px; font-weight: 600;">
+            Users in Voice Channels Right Now (1-Click Link):
+          </label>
+          <div id="modalActiveVoiceUsersList" style="display: flex; flex-wrap: wrap; gap: 8px; max-height: 140px; overflow-y: auto; padding: 4px 0;">
+            <!-- Populated dynamically with detected voice users -->
+          </div>
+        </div>
+
+        <div id="modalTeleportStatus" style="display:none; margin-top: 14px; padding: 10px 14px; border-radius: 8px; font-size: 0.84rem; line-height: 1.4;"></div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.78rem; color: #64748b;">Saved locally in app storage</span>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary" data-close="modalSetUser">Close</button>
+          <button class="btn btn-discord" id="btnModalSaveUserOnly">Save Username</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Hidden HTML5 Audio Element for Local Playback -->
+  <audio id="localAudioPlayer" preload="auto"></audio>
+
+  <script src="js/app.js"></script>
 </body>
 </html>
