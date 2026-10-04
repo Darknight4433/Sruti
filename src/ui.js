@@ -134,7 +134,21 @@ export function buildPanelComponents({ paused = false, disabled = false, loopMod
       .setStyle(ButtonStyle.Secondary),
   );
 
-  return [row1, row2];
+  const row3 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('mc:addlib')
+      .setEmoji('📚')
+      .setLabel('Add to Library')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId('mc:list')
+      .setEmoji('📜')
+      .setLabel('Queue')
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  return [row1, row2, row3];
 }
 
 export function buildStatusEmbed({ client, music, uptime = 0 }) {

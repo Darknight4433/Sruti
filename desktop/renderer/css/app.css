@@ -1667,6 +1667,46 @@ body {
   flex-shrink: 0;
 }
 
+.track-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 10px;
+  flex-shrink: 0;
+  opacity: 0.9;
+  transition: opacity 0.15s ease;
+}
+
+.track-row:hover .track-actions {
+  opacity: 1;
+}
+
+.card-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.btn-bar-lib {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 6px;
+}
+
+.btn-bar-lib:hover {
+  color: var(--accent-color);
+  background: rgba(255, 255, 255, 0.05);
+  transform: scale(1.1);
+}
+
 /* ==================== BUTTONS ==================== */
 .btn {
   display: inline-flex;
@@ -1758,6 +1798,13 @@ body {
 .btn-sm {
   padding: 6px 12px;
   font-size: 12px;
+}
+
+.btn-xs {
+  padding: 3px 8px;
+  font-size: 11px;
+  border-radius: 5px;
+  gap: 4px;
 }
 
 .btn-outline {

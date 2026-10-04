@@ -779,6 +779,16 @@ function setupPlayerControls() {
     showToast(`Added "${state.currentTrack.title}" to Library! 📚`);
   });
 
+  document.getElementById('btnBarAddToLib')?.addEventListener('click', async () => {
+    if (!state.currentTrack) {
+      showToast('No song is currently playing.');
+      return;
+    }
+    await window.scifyApi?.storeAction('addToDesktopLibrary', [state.currentTrack]);
+    await refreshLibrary();
+    showToast(`Added "${state.currentTrack.title}" to Library! 📚`);
+  });
+
   document.getElementById('btnPlayerAddToPlaylist')?.addEventListener('click', async () => {
     if (!state.currentTrack) {
       showToast('No song is currently playing.');
@@ -1243,7 +1253,7 @@ function renderLibrary() {
 
   el.libTracksTable.innerHTML = '';
   tracks.forEach((track, i) => {
-    const row = createTrackRow(track, i + 1);
+    const row = createTrackRow(track, i + 1, { source: 'library' });
     el.libTracksTable.appendChild(row);
   });
 }
@@ -1271,7 +1281,7 @@ function renderFavorites() {
   }
   el.favoritesTable.innerHTML = '';
   state.favorites.forEach((track, i) => {
-    const row = createTrackRow(track, i + 1);
+    const row = createTrackRow(track, i + 1, { source: 'favorites' });
     el.favoritesTable.appendChild(row);
   });
 }
@@ -1290,7 +1300,7 @@ function renderHistory() {
   }
   el.historyTable.innerHTML = '';
   state.localHistory.forEach((track, i) => {
-    const row = createTrackRow(track, i + 1);
+    const row = createTrackRow(track, i + 1, { source: 'history' });
     el.historyTable.appendChild(row);
   });
 }
@@ -1378,34 +1388,17 @@ async function openPlaylistModal(playlistId) {
     }
     listEl.innerHTML = '';
     pl.tracks.forEach((track, i) => {
-      const row = document.createElement('div');
-      row.className = 'track-row';
-      row.innerHTML = `
-        <span class="track-index">${i + 1}</span>
-        <img src="${track.thumbnail || ''}" class="track-thumb" alt="">
-        <div class="track-info">
-          <div class="track-name">${escapeHtml(track.title)}</div>
-          <div class="track-artist-sub">${escapeHtml(track.artist || 'YouTube')}</div>
-        </div>
-        <span class="track-dur">${formatDuration(track.durationInSec || 0)}</span>
-        <button class="btn btn-sm btn-danger btn-del-track" style="margin-left: 8px;" title="Remove song">&times;</button>
-      `;
-
-      row.querySelector('.btn-del-track').addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await window.scifyApi?.storeAction('removeTrackFromPlaylist', pl.id, i);
-        pl.tracks.splice(i, 1);
-        if (subEl) subEl.textContent = `${pl.tracks.length} tracks`;
-        renderModalTracks();
-        await refreshPlaylists();
-        showToast('Removed track from playlist');
+      const row = createTrackRow(track, i + 1, {
+        source: 'playlist',
+        onDelete: async () => {
+          await window.scifyApi?.storeAction('removeTrackFromPlaylist', pl.id, i);
+          pl.tracks.splice(i, 1);
+          if (subEl) subEl.textContent = `${pl.tracks.length} tracks • ${pl.description || 'Custom Playlist'}`;
+          renderModalTracks();
+          await refreshPlaylists();
+          showToast('Removed track from playlist');
+        },
       });
-
-      row.addEventListener('click', () => {
-        closeModal('modalViewPlaylist');
-        playTrack(track);
-      });
-
       listEl.appendChild(row);
     });
   };
@@ -1483,7 +1476,7 @@ function renderQueue() {
     const requester = state.currentTrack.requestedBy || (isDiscord ? 'Discord User' : 'Local User');
     el.queueCurrentCard.innerHTML = `
       <div class="track-row" style="background: rgba(0, 240, 255, 0.08); border-color: var(--border-glow);">
-        <span class="track-index">▶</span>
+        <span class="track-index" style="color: var(--accent-color);">▶</span>
         <img src="${state.currentTrack.thumbnail || ''}" class="track-thumb" alt="">
         <div class="track-info">
           <div class="track-name">${escapeHtml(state.currentTrack.title)}</div>
@@ -1493,8 +1486,22 @@ function renderQueue() {
           </div>
         </div>
         <span class="track-dur">${formatDuration(state.currentTrack.durationInSec || 0)}</span>
+        <div class="track-actions">
+          <button class="btn btn-xs btn-secondary btn-cur-add-lib" title="Add currently playing track to Library">📚 + Library</button>
+          <button class="btn btn-xs btn-outline btn-cur-fav" title="Add to Favorites">❤️ Favorite</button>
+        </div>
       </div>
     `;
+    el.queueCurrentCard.querySelector('.btn-cur-add-lib')?.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await window.scifyApi?.storeAction('addToDesktopLibrary', [state.currentTrack]);
+      await refreshLibrary();
+      showToast(`Added "${state.currentTrack.title}" to Library! 📚`);
+    });
+    el.queueCurrentCard.querySelector('.btn-cur-fav')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleFavorite(state.currentTrack);
+    });
   }
 
   if (queueToRender.length === 0) {
@@ -1522,7 +1529,11 @@ function renderQueue() {
         </div>
       </div>
       <span class="track-dur">${formatDuration(track.durationInSec || 0)}</span>
-      <button class="btn btn-sm btn-danger btn-remove-q" style="margin-left: 8px;" title="Remove from queue">&times;</button>
+      <div class="track-actions">
+        <button class="btn btn-xs btn-primary btn-q-play" title="Play Now">▶ Play</button>
+        <button class="btn btn-xs btn-secondary btn-q-lib" title="Add to Library">📚 +Lib</button>
+        <button class="btn btn-xs btn-danger btn-remove-q" title="Remove from queue">&times;</button>
+      </div>
     `;
 
     // Drag & Drop handlers for Queue Reordering
@@ -1578,6 +1589,24 @@ function renderQueue() {
         renderQueue();
         showToast(`Queue reordered (#${fromIndex + 1} → #${toIndex + 1})`);
       }
+    });
+
+    row.querySelector('.btn-q-play').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (isDiscord) {
+        await sendDiscordAction('jumpQueue', { index: i });
+      } else {
+        state.localQueue.splice(i, 1);
+        renderQueue();
+        playTrack(track);
+      }
+    });
+
+    row.querySelector('.btn-q-lib').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await window.scifyApi?.storeAction('addToDesktopLibrary', [track]);
+      await refreshLibrary();
+      showToast(`Added "${track.title}" to Library! 📚`);
     });
 
     row.querySelector('.btn-remove-q').addEventListener('click', async (e) => {
@@ -1669,12 +1698,15 @@ function renderHomeSections() {
   }
 }
 
-function createTrackRow(track, index) {
+function createTrackRow(track, index, options = {}) {
   const row = document.createElement('div');
   row.className = 'track-row';
   const thumbHtml = track.thumbnail
     ? `<img src="${escapeHtml(track.thumbnail)}" class="track-thumb" alt="">`
-    : `<div class="track-thumb-placeholder" style="width:40px; height:40px; border-radius:6px; background:rgba(0,240,255,0.1); display:flex; align-items:center; justify-content:center; color:#00f0ff; font-size:0.8rem;">🎵</div>`;
+    : `<div class="track-thumb-placeholder" style="width:48px; height:32px; border-radius:4px; background:rgba(0,240,255,0.1); display:flex; align-items:center; justify-content:center; color:var(--accent-color); font-size:0.8rem;">🎵</div>`;
+
+  const isLibrary = options.source === 'library';
+  const isPlaylist = options.source === 'playlist';
 
   row.innerHTML = `
     <span class="track-index">${index}</span>
@@ -1683,11 +1715,58 @@ function createTrackRow(track, index) {
       <div class="track-name">${escapeHtml(track.title)}</div>
       <div class="track-artist-sub">
         ${escapeHtml(track.artist || 'YouTube')}
-        ${track.addedBy && track.addedBy !== 'default' ? ` • <span style="color:var(--color-neon-cyan); font-size:0.75rem;">👤 ${escapeHtml(track.addedBy)}</span>` : ''}
+        ${track.addedBy && track.addedBy !== 'default' ? ` • <span style="color:var(--accent-color); font-size:0.75rem;">👤 ${escapeHtml(track.addedBy)}</span>` : ''}
       </div>
     </div>
     <span class="track-dur">${formatDuration(track.durationInSec || 0)}</span>
+    <div class="track-actions">
+      <button class="btn btn-xs btn-primary btn-track-play" title="Play Now">▶ Play</button>
+      <button class="btn btn-xs btn-secondary btn-track-queue" title="Add to Queue">+ Queue</button>
+      ${!isLibrary ? `<button class="btn btn-xs btn-secondary btn-track-lib" title="Add to Library">📚 +Lib</button>` : ''}
+      ${isLibrary ? `<button class="btn btn-xs btn-danger btn-track-del-lib" title="Remove from Library">&times;</button>` : ''}
+      ${isPlaylist ? `<button class="btn btn-xs btn-danger btn-track-del-pl" title="Remove from Playlist">&times;</button>` : ''}
+    </div>
   `;
+
+  row.querySelector('.btn-track-play')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    playTrack(track);
+  });
+
+  row.querySelector('.btn-track-queue')?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (state.outputTarget === 'discord') {
+      showToast(`Queuing "${track.title}" to Discord server…`);
+      await sendDiscordAction('play', { query: track.url, requester: 'Windows Desktop', playNow: false });
+      showToast(`Queued "${track.title}" to Discord!`);
+    } else {
+      state.localQueue.push({ ...track, requestedBy: 'Windows Desktop' });
+      renderQueue();
+      showToast(`Added "${track.title}" to Queue`);
+    }
+  });
+
+  row.querySelector('.btn-track-lib')?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await window.scifyApi?.storeAction('addToDesktopLibrary', [track]);
+    await refreshLibrary();
+    showToast(`Added "${track.title}" to Library! 📚`);
+  });
+
+  row.querySelector('.btn-track-del-lib')?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await window.scifyApi?.storeAction('removeFromDesktopLibrary', track.url);
+    await refreshLibrary();
+    showToast(`Removed "${track.title}" from Library`);
+  });
+
+  if (isPlaylist && typeof options.onDelete === 'function') {
+    row.querySelector('.btn-track-del-pl')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      options.onDelete();
+    });
+  }
+
   row.addEventListener('click', () => playTrack(track));
   return row;
 }
@@ -1698,16 +1777,38 @@ function createMusicCard(track, onPlay) {
   card.innerHTML = `
     <div class="card-art-box">
       <img src="${track.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=400&auto=format&fit=crop'}" class="card-art" alt="">
-      <button class="card-overlay-btn">
+      <button class="card-overlay-btn" title="Play Now">
         <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
       </button>
     </div>
     <div class="card-title">${escapeHtml(track.title)}</div>
     <div class="card-sub">${escapeHtml(track.artist || 'YouTube')}</div>
+    <div class="card-quick-actions">
+      <button class="btn btn-xs btn-outline btn-card-queue" title="Add to Queue">+ Queue</button>
+      <button class="btn btn-xs btn-outline btn-card-lib" title="Add to Library">📚 +Lib</button>
+    </div>
   `;
   card.querySelector('.card-overlay-btn').addEventListener('click', (e) => {
     e.stopPropagation();
     onPlay();
+  });
+  card.querySelector('.btn-card-queue')?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (state.outputTarget === 'discord') {
+      showToast(`Queuing "${track.title}" to Discord server…`);
+      await sendDiscordAction('play', { query: track.url, requester: 'Windows Desktop', playNow: false });
+      showToast(`Queued "${track.title}" to Discord!`);
+    } else {
+      state.localQueue.push({ ...track, requestedBy: 'Windows Desktop' });
+      renderQueue();
+      showToast(`Added "${track.title}" to Queue`);
+    }
+  });
+  card.querySelector('.btn-card-lib')?.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await window.scifyApi?.storeAction('addToDesktopLibrary', [track]);
+    await refreshLibrary();
+    showToast(`Added "${track.title}" to Library! 📚`);
   });
   card.addEventListener('click', onPlay);
   return card;

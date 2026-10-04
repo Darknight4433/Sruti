@@ -475,6 +475,19 @@ async function handleButton(interaction) {
     }
     return interaction.update(renderQueueFor(state, member));
   }
+  if (action === 'addlib') {
+    if (!hasAccess(member)) {
+      return interaction.reply({ content: 'No access.', flags: MessageFlags.Ephemeral });
+    }
+    if (!state?.currentTrack) {
+      return interaction.reply({ content: '⚠️ No song is currently playing.', flags: MessageFlags.Ephemeral });
+    }
+    store.addToUserLibrary(interaction.guild.id, member.id, [state.currentTrack]);
+    return interaction.reply({
+      content: `📚 Added **${state.currentTrack.title}** to your library! Use \`/library view\` to play or manage your saved songs.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
 
   // --- Approve/Deny permission requests ---
   if (action.startsWith('approve:') || action.startsWith('deny:')) {
