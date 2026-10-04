@@ -1,13 +1,13 @@
 :root {
-  --accent-color: #00f0ff;
-  --accent-glow: rgba(0, 240, 255, 0.4);
-  --bg-base: #0a0d14;
-  --bg-surface: rgba(18, 24, 38, 0.7);
-  --bg-surface-elevated: rgba(28, 36, 56, 0.8);
-  --bg-sidebar: rgba(12, 16, 26, 0.95);
-  --border-color: rgba(255, 255, 255, 0.08);
-  --border-glow: rgba(0, 240, 255, 0.25);
-  --text-primary: #ffffff;
+  --accent-color: #00f5d4;
+  --accent-glow: rgba(0, 245, 212, 0.2);
+  --bg-base: #08090e;
+  --bg-surface: #0e111a;
+  --bg-surface-elevated: #141724;
+  --bg-sidebar: #0b0d14;
+  --border-color: rgba(255, 255, 255, 0.06);
+  --border-glow: rgba(255, 255, 255, 0.09);
+  --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
   --discord-purple: #5865F2;
@@ -15,11 +15,11 @@
   --discord-red: #ED4245;
   --danger-color: #ef4444;
   --success-color: #10b981;
-  --font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
-  --titlebar-height: 38px;
-  --player-bar-height: 90px;
-  --sidebar-width: 250px;
+  --titlebar-height: 40px;
+  --player-bar-height: 88px;
+  --sidebar-width: 240px;
 }
 
 * {
@@ -1569,18 +1569,60 @@ body {
 .track-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  background: var(--bg-surface);
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 10px 14px;
-  transition: all 0.15s;
+  padding: 8px 12px;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
   cursor: pointer;
+  position: relative;
 }
 
 .track-row:hover {
-  background: var(--bg-surface-elevated);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.track-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  color: var(--text-muted);
+  font-size: 1.15rem;
+  width: 18px;
+  height: 18px;
+  margin-right: 2px;
+  opacity: 0.35;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  user-select: none;
+}
+
+.track-row:hover .track-drag-handle {
+  opacity: 0.9;
+  color: var(--accent-color);
+}
+
+.track-drag-handle:active {
+  cursor: grabbing;
+}
+
+.queue-draggable-row.is-dragging {
+  opacity: 0.3;
+  transform: scale(0.985);
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px dashed var(--accent-color) !important;
+}
+
+.queue-draggable-row.drag-over-above {
+  border-top: 2px solid var(--accent-color) !important;
+  transform: translateY(2px);
+}
+
+.queue-draggable-row.drag-over-below {
+  border-bottom: 2px solid var(--accent-color) !important;
+  transform: translateY(-2px);
 }
 
 .track-index {

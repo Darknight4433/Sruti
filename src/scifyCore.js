@@ -673,6 +673,16 @@ export class ScifyCore extends EventEmitter {
         return { success: true };
       }
 
+      case 'moveQueue': {
+        const { fromIndex, toIndex } = params;
+        if (state && typeof state.moveQueue === 'function') {
+          const success = state.moveQueue(fromIndex, toIndex);
+          this.broadcastState();
+          return { success };
+        }
+        return { success: false };
+      }
+
       case 'sendPanel': {
         const { textChannelId } = params;
         const guild = this.client.guilds.cache.get(guildId);

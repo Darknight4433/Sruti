@@ -344,6 +344,23 @@ class GuildMusicState {
     this.emitChange();
   }
 
+  moveQueue(fromIndex, toIndex) {
+    if (
+      fromIndex < 0 ||
+      fromIndex >= this.queue.length ||
+      toIndex < 0 ||
+      toIndex >= this.queue.length ||
+      fromIndex === toIndex
+    ) {
+      return false;
+    }
+    const [moved] = this.queue.splice(fromIndex, 1);
+    this.queue.splice(toIndex, 0, moved);
+    this.lastActivity = Date.now();
+    this.emitChange();
+    return true;
+  }
+
   async start() {
     if (!this.playing) {
       await this.waitUntilReady();

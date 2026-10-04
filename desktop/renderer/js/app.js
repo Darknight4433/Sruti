@@ -1505,10 +1505,13 @@ function renderQueue() {
   el.queueList.innerHTML = '';
   queueToRender.forEach((track, i) => {
     const row = document.createElement('div');
-    row.className = 'track-row';
+    row.className = 'track-row queue-draggable-row';
+    row.draggable = true;
+    row.dataset.index = i;
     const requester = track.requestedBy || (isDiscord ? 'Discord User' : 'Local User');
 
     row.innerHTML = `
+      <span class="track-drag-handle" title="Drag to reorder queue">⠿</span>
       <span class="track-index">${i + 1}</span>
       <img src="${track.thumbnail || ''}" class="track-thumb" alt="">
       <div class="track-info">
@@ -1519,8 +1522,63 @@ function renderQueue() {
         </div>
       </div>
       <span class="track-dur">${formatDuration(track.durationInSec || 0)}</span>
-      <button class="btn btn-sm btn-danger btn-remove-q" style="margin-left: 8px;">&times;</button>
+      <button class="btn btn-sm btn-danger btn-remove-q" style="margin-left: 8px;" title="Remove from queue">&times;</button>
     `;
+
+    // Drag & Drop handlers for Queue Reordering
+    row.addEventListener('dragstart', (e) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(i));
+      row.classList.add('is-dragging');
+    });
+
+    row.addEventListener('dragend', () => {
+      row.classList.remove('is-dragging');
+      document.querySelectorAll('.queue-draggable-row').forEach((r) => {
+        r.classList.remove('drag-over-above', 'drag-over-below');
+      });
+    });
+
+    row.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const rect = row.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (e.clientY < midY) {
+        row.classList.add('drag-over-above');
+        row.classList.remove('drag-over-below');
+      } else {
+        row.classList.add('drag-over-below');
+        row.classList.remove('drag-over-above');
+      }
+    });
+
+    row.addEventListener('dragleave', () => {
+      row.classList.remove('drag-over-above', 'drag-over-below');
+    });
+
+    row.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      row.classList.remove('drag-over-above', 'drag-over-below');
+      const fromIndex = parseInt(e.dataTransfer.getData('text/plain'), 10);
+      let toIndex = i;
+      const rect = row.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      if (e.clientY >= midY && toIndex < queueToRender.length - 1) {
+        toIndex += 1;
+      }
+      if (isNaN(fromIndex) || fromIndex === toIndex) return;
+
+      if (isDiscord) {
+        showToast(`Reordering queue track #${fromIndex + 1} → #${toIndex + 1}…`);
+        await sendDiscordAction('moveQueue', { fromIndex, toIndex });
+      } else {
+        const [movedItem] = state.localQueue.splice(fromIndex, 1);
+        state.localQueue.splice(toIndex, 0, movedItem);
+        renderQueue();
+        showToast(`Queue reordered (#${fromIndex + 1} → #${toIndex + 1})`);
+      }
+    });
 
     row.querySelector('.btn-remove-q').addEventListener('click', async (e) => {
       e.stopPropagation();
