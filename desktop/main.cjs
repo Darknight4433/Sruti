@@ -75,6 +75,7 @@ function createWindow() {
     height: 880,
     minWidth: 1024,
     minHeight: 700,
+    icon: path.join(__dirname, 'assets', 'icon.png'),
     frame: false, // Custom sleek glassmorphic titlebar
     backgroundColor: '#0a0d14',
     webPreferences: {

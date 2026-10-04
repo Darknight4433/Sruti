@@ -15,8 +15,8 @@
     <div class="titlebar-drag-region">
       <div class="app-logo">
         <div class="logo-slot" id="appLogoSlot">
-          <img id="appLogoImg" class="logo-img" src="assets/logo.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='inline-block';" alt="Sruti" style="display:none; width: 22px; height: 22px; border-radius: 6px; object-fit: cover;">
-          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <img id="appLogoImg" class="logo-img" src="assets/logo.png" onload="this.style.display='inline-block'; if (this.nextElementSibling) this.nextElementSibling.style.display='none';" onerror="this.style.display='none'; if (this.nextElementSibling) this.nextElementSibling.style.display='inline-block';" alt="Sruti" style="width: 24px; height: 24px; border-radius: 6px; object-fit: cover;">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;">
             <circle cx="12" cy="12" r="10" stroke="url(#logo-grad)"/>
             <path d="M9 8l7 4-7 4V8z" fill="url(#logo-grad)"/>
             <defs>
@@ -164,7 +164,8 @@
       <section class="screen-view active-screen" id="screen-splash">
         <div class="splash-container">
           <div class="splash-glow"></div>
-          <svg class="splash-logo" viewBox="0 0 24 24">
+          <img class="splash-logo-img" src="assets/logo.png" alt="Sruti Logo" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" style="width: 96px; height: 96px; border-radius: 24px; object-fit: cover; box-shadow: 0 8px 32px var(--accent-glow); margin-bottom: 16px;">
+          <svg class="splash-logo" viewBox="0 0 24 24" style="display:none;">
             <circle cx="12" cy="12" r="10" stroke="var(--accent-color)" stroke-width="1.5" fill="none"/>
             <polygon points="10 8 16 12 10 16 10 8" fill="var(--accent-color)"/>
           </svg>
@@ -889,8 +890,8 @@
             <div class="about-brand-header">
               <!-- Dedicated container for user's logo -->
               <div class="about-logo-wrapper" id="aboutLogoWrapper">
-                <img id="aboutLogoImg" class="about-brand-logo" src="assets/logo.png" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" alt="Sruti Logo">
-                <div class="about-logo-placeholder">
+                <img id="aboutLogoImg" class="about-brand-logo" src="assets/logo.png" onload="if (this.nextElementSibling) this.nextElementSibling.style.display='none';" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" alt="Sruti Logo">
+                <div class="about-logo-placeholder" style="display:none;">
                   <svg viewBox="0 0 24 24" class="about-svg-icon">
                     <circle cx="12" cy="12" r="10" stroke="var(--accent-color)" stroke-width="2" fill="none"/>
                     <polygon points="10 8 16 12 10 16 10 8" fill="var(--accent-color)"/>
