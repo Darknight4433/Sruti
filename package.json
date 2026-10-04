@@ -33,7 +33,7 @@
       "**/@snazzah/**"
     ],
     "win": {
-      "icon": "desktop/assets/icon.png",
+      "icon": "desktop/assets/icon.ico",
       "target": [
         "nsis",
         "portable"
