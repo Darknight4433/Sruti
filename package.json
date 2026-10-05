@@ -15,6 +15,7 @@
   "build": {
     "appId": "com.srutimusic.app",
     "productName": "Sruti",
+    "asar": false,
     "directories": {
       "output": "dist"
     },
@@ -25,12 +26,6 @@
       ".env.example",
       "!**/.env",
       "!**/.env.*"
-    ],
-    "asarUnpack": [
-      "**/*.node",
-      "**/youtube-dl-exec/**",
-      "**/ffmpeg-static/**",
-      "**/@snazzah/**"
     ],
     "win": {
       "icon": "desktop/assets/icon.ico",

@@ -11,22 +11,53 @@ try {
 const { app, BrowserWindow, ipcMain, shell, Tray, Menu, Notification, globalShortcut } = require('electron');
 const path = require('node:path');
 const { fork } = require('node:child_process');
-const { existsSync } = require('node:fs');
+const { existsSync, appendFileSync, mkdirSync } = require('node:fs');
+const { pathToFileURL } = require('node:url');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 
-// Ensure native davey library can be loaded when packaged
-if (process.resourcesPath) {
-  const unpackedNode = path.join(
-    process.resourcesPath,
-    'app.asar.unpacked',
-    'node_modules',
-    '@snazzah',
-    'davey-win32-x64-msvc',
-    'davey.win32-x64-msvc.node'
-  );
-  if (existsSync(unpackedNode)) {
-    process.env.NAPI_RS_NATIVE_LIBRARY_PATH = unpackedNode;
+// Persistent diagnostic logger to %APPDATA%\Sruti\sruti_bot.log
+const LOG_DIR = path.join(process.env.APPDATA || process.env.USERPROFILE || '', 'Sruti');
+const LOG_FILE = path.join(LOG_DIR, 'sruti_bot.log');
+function logToFile(msg) {
+  try {
+    if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
+    appendFileSync(LOG_FILE, `[${new Date().toISOString()}] ${msg}\n`);
+  } catch {}
+}
+
+// Helper to resolve src/ modules whether packaged or in development
+function resolveSrc(relPath) {
+  const candidates = [
+    // 1. Packaged without asar: resources/app/src/...
+    process.resourcesPath ? path.join(process.resourcesPath, 'app', 'src', relPath) : null,
+    // 2. Packaged with asar unpack: resources/app.asar.unpacked/src/...
+    process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'src', relPath) : null,
+    // 3. Normal root / development: ROOT_DIR/src/...
+    path.join(ROOT_DIR, 'src', relPath),
+    // 4. Relative to desktop: ../src/...
+    path.resolve(__dirname, '..', 'src', relPath),
+  ].filter(Boolean);
+
+  for (const c of candidates) {
+    if (existsSync(c)) {
+      return pathToFileURL(c).href;
+    }
+  }
+  return pathToFileURL(path.join(ROOT_DIR, 'src', relPath)).href;
+}
+
+// Ensure native davey library can be loaded in all runtime environments
+const daveyCandidates = [
+  process.resourcesPath ? path.join(process.resourcesPath, 'app', 'node_modules', '@snazzah', 'davey-win32-x64-msvc', 'davey.win32-x64-msvc.node') : null,
+  process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', '@snazzah', 'davey-win32-x64-msvc', 'davey.win32-x64-msvc.node') : null,
+  path.join(ROOT_DIR, 'node_modules', '@snazzah', 'davey-win32-x64-msvc', 'davey.win32-x64-msvc.node'),
+].filter(Boolean);
+
+for (const p of daveyCandidates) {
+  if (existsSync(p)) {
+    process.env.NAPI_RS_NATIVE_LIBRARY_PATH = p;
+    break;
   }
 }
 
@@ -39,6 +70,7 @@ const candidateEnvPaths = [
   path.join(process.cwd(), '.env'),
   path.join(path.dirname(process.execPath), '.env'),
   process.resourcesPath ? path.join(process.resourcesPath, '.env') : null,
+  process.resourcesPath ? path.join(process.resourcesPath, 'app', '.env') : null,
   process.resourcesPath ? path.join(process.resourcesPath, 'app.asar.unpacked', '.env') : null,
 ].filter(Boolean);
 
@@ -57,15 +89,21 @@ for (const p of candidateEnvPaths) {
 async function ensureCredentials() {
   if (!process.env.DISCORD_TOKEN || process.env.DISCORD_TOKEN === 'your-bot-token-here' || process.env.DISCORD_TOKEN.length < 20) {
     try {
-      const { getDefaultToken, getDefaultClientId } = await import('../src/vault.js');
-      process.env.DISCORD_TOKEN = getDefaultToken();
+      const { getDefaultToken, getDefaultClientId } = await import(resolveSrc('vault.js'));
+      const token = getDefaultToken();
+      if (token && token.length > 20) {
+        process.env.DISCORD_TOKEN = token;
+      }
       if (!process.env.DISCORD_CLIENT_ID) {
         process.env.DISCORD_CLIENT_ID = getDefaultClientId();
       }
-    } catch {}
+      logToFile('Credentials loaded from vault successfully.');
+    } catch (err) {
+      logToFile(`ensureCredentials error: ${err.message}`);
+    }
   }
 }
-ensureCredentials();
+ensureCredentials().catch(() => {});
 
 // Set app name
 app.name = 'Sruti';
@@ -152,7 +190,7 @@ function createTray() {
       { type: 'separator' },
       { label: 'Add to Discord', click: async () => {
         try {
-          const { scifyCore } = await import('../src/scifyCore.js');
+          const { scifyCore } = await import(resolveSrc('scifyCore.js'));
           const invite = scifyCore.generateInviteUrl();
           if (invite?.url) shell.openExternal(invite.url);
         } catch (err) {
@@ -188,6 +226,9 @@ async function startBotProcess() {
     return { success: true, message: 'Bot process is already running.' };
   }
 
+  logToFile('startBotProcess invoked');
+  await ensureCredentials();
+
   const token = process.env.DISCORD_TOKEN;
   if (!token || token === 'your-bot-token-here' || token.length < 20) {
     botStatus.online = false;
@@ -195,19 +236,24 @@ async function startBotProcess() {
     botStatus.noToken = true;
     sendToRenderer('scify:status', botStatus);
     sendToRenderer('scify:log', { level: 'warn', text: 'Discord Bot Token is not set. Go to Settings -> Discord Bot Credentials to enter your token.' });
+    logToFile('Discord Bot Token is missing or invalid.');
     return { success: false, error: 'NO_TOKEN' };
   }
 
+  logToFile(`Token present (length: ${token.length}). Starting Discord bot engine…`);
   sendToRenderer('scify:log', { level: 'info', text: 'Starting Discord bot engine…' });
   botStatus.starting = true;
   botStatus.noToken = false;
   sendToRenderer('scify:status', botStatus);
 
   try {
-    const { scifyCore } = await import('../src/scifyCore.js');
+    const scifyCorePath = resolveSrc('scifyCore.js');
+    logToFile(`Importing scifyCore from: ${scifyCorePath}`);
+    const { scifyCore } = await import(scifyCorePath);
 
     // Wire up events from scifyCore to renderer
     scifyCore.on('botStatusChange', (data) => {
+      logToFile(`scifyCore event botStatusChange: online=${data.online}`);
       botStatus.online = data.online;
       botStatus.starting = false;
       sendToRenderer('scify:status', {
@@ -229,14 +275,19 @@ async function startBotProcess() {
     });
 
     if (!botStarted) {
-      await import('../src/index.js');
+      const indexPath = resolveSrc('index.js');
+      logToFile(`Importing index.js from: ${indexPath}`);
+      await import(indexPath);
       botStarted = true;
+      logToFile('index.js imported successfully.');
     } else if (scifyCore.client) {
+      logToFile('Logging in with existing client...');
       await scifyCore.client.login(process.env.DISCORD_TOKEN);
     }
 
     return { success: true };
   } catch (err) {
+    logToFile(`startBotProcess error: ${err.stack || err.message}`);
     console.error('Failed to start bot in main process:', err);
     botStatus.online = false;
     botStatus.starting = false;
@@ -247,9 +298,9 @@ async function startBotProcess() {
 }
 
 async function stopBotProcess() {
-  const { scifyCore } = await import('../src/scifyCore.js');
-  sendToRenderer('scify:log', { level: 'info', text: 'Disconnecting Discord bot…' });
   try {
+    const { scifyCore } = await import(resolveSrc('scifyCore.js'));
+    sendToRenderer('scify:log', { level: 'info', text: 'Disconnecting Discord bot…' });
     if (scifyCore.client) {
       scifyCore.client.destroy();
     }
@@ -285,6 +336,7 @@ app.whenReady().then(async () => {
 
   // Auto-start Discord bot process on app readiness
   startBotProcess().catch((err) => {
+    logToFile(`Initial bot start error: ${err.stack || err.message}`);
     console.error('Initial bot start error:', err);
   });
 });
@@ -330,7 +382,7 @@ ipcMain.handle('open-external', async (event, url) => {
 
 // Discord Invite generation
 ipcMain.handle('get-discord-invite', async () => {
-  const { scifyCore } = await import('../src/scifyCore.js');
+  const { scifyCore } = await import(resolveSrc('scifyCore.js'));
   return scifyCore.generateInviteUrl();
 });
 
@@ -339,7 +391,7 @@ ipcMain.handle('bot-start', () => startBotProcess());
 ipcMain.handle('bot-stop', () => stopBotProcess());
 ipcMain.handle('bot-restart', () => restartBotProcess());
 ipcMain.handle('get-bot-status', async () => {
-  const { scifyCore } = await import('../src/scifyCore.js');
+  const { scifyCore } = await import(resolveSrc('scifyCore.js'));
   const dStatus = scifyCore.getDiscordStatus();
   return {
     ...botStatus,
@@ -350,19 +402,19 @@ ipcMain.handle('get-bot-status', async () => {
 
 // Search tracks
 ipcMain.handle('search-tracks', async (event, query) => {
-  const { scifyCore } = await import('../src/scifyCore.js');
+  const { scifyCore } = await import(resolveSrc('scifyCore.js'));
   return await scifyCore.searchTracks(query);
 });
 
 // Direct stream URL for local HTML5 player
 ipcMain.handle('get-stream-url', async (event, url) => {
-  const { scifyCore } = await import('../src/scifyCore.js');
+  const { scifyCore } = await import(resolveSrc('scifyCore.js'));
   return await scifyCore.getDirectStreamUrl(url);
 });
 
 // Discord VC control action
 ipcMain.handle('discord-action', async (event, action, params) => {
-  const { scifyCore } = await import('../src/scifyCore.js');
+  const { scifyCore } = await import(resolveSrc('scifyCore.js'));
   try {
     return await scifyCore.controlDiscord(action, params);
   } catch (err) {
@@ -372,7 +424,7 @@ ipcMain.handle('discord-action', async (event, action, params) => {
 
 // Storage operations
 ipcMain.handle('store-action', async (event, method, ...args) => {
-  const { store } = await import('../src/store.js');
+  const { store } = await import(resolveSrc('store.js'));
   if (typeof store[method] === 'function') {
     return store[method](...args);
   }
@@ -381,12 +433,12 @@ ipcMain.handle('store-action', async (event, method, ...args) => {
 
 // Env config
 ipcMain.handle('get-env-config', async () => {
-  const { scifyCore } = await import('../src/scifyCore.js');
+  const { scifyCore } = await import(resolveSrc('scifyCore.js'));
   return scifyCore.getEnvConfig();
 });
 
 ipcMain.handle('save-env-config', async (event, newConfig) => {
-  const { scifyCore } = await import('../src/scifyCore.js');
+  const { scifyCore } = await import(resolveSrc('scifyCore.js'));
   const res = scifyCore.saveEnvConfig(newConfig);
   if (res.success) {
     if (newConfig.DISCORD_TOKEN && newConfig.DISCORD_TOKEN.length > 20) {
@@ -404,7 +456,7 @@ ipcMain.handle('notify', (event, title, body) => {
 
 // Import Spotify playlist
 ipcMain.handle('import-spotify', async (event, url) => {
-  const { fetchSpotifyPlaylist } = await import('../src/spotify.js');
+  const { fetchSpotifyPlaylist } = await import(resolveSrc('spotify.js'));
   try {
     return await fetchSpotifyPlaylist(url);
   } catch (err) {
