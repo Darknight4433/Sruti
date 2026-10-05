@@ -1,9 +1,34 @@
+const dns = require('node:dns');
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
+
+try {
+  const { setGlobalDispatcher, Agent } = require('undici');
+  setGlobalDispatcher(new Agent({ connect: { timeout: 30_000 } }));
+} catch {}
+
 const { app, BrowserWindow, ipcMain, shell, Tray, Menu, Notification, globalShortcut } = require('electron');
 const path = require('node:path');
 const { fork } = require('node:child_process');
 const { existsSync } = require('node:fs');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
+
+// Ensure native davey library can be loaded when packaged
+if (process.resourcesPath) {
+  const unpackedNode = path.join(
+    process.resourcesPath,
+    'app.asar.unpacked',
+    'node_modules',
+    '@snazzah',
+    'davey-win32-x64-msvc',
+    'davey.win32-x64-msvc.node'
+  );
+  if (existsSync(unpackedNode)) {
+    process.env.NAPI_RS_NATIVE_LIBRARY_PATH = unpackedNode;
+  }
+}
 
 // Look for .env across multiple potential locations (userData, workspace, source, packaged)
 const candidateEnvPaths = [

@@ -1,3 +1,13 @@
+import dns from 'node:dns';
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
+
+import { setGlobalDispatcher, Agent } from 'undici';
+try {
+  setGlobalDispatcher(new Agent({ connect: { timeout: 30_000 } }));
+} catch {}
+
 import 'dotenv/config';
 import {
   Client,
@@ -44,6 +54,9 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildMembers,
   ],
+  rest: {
+    timeout: 30_000,
+  },
 });
 
 const music = new MusicManager();
@@ -697,6 +710,28 @@ async function handleButton(interaction) {
       modal.addComponents(new ActionRowBuilder().addComponents(input));
       return interaction.showModal(modal);
     }
+    case 'playnow': {
+      const modal = new ModalBuilder().setCustomId('mc:playNowModal').setTitle('Play Music Now');
+      const input = new TextInputBuilder()
+        .setCustomId('query')
+        .setLabel('Song name or YouTube/Spotify link')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('e.g. Song title or link')
+        .setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+      return interaction.showModal(modal);
+    }
+    case 'addsong': {
+      const modal = new ModalBuilder().setCustomId('mc:addQueueModal').setTitle('Add Song to Queue');
+      const input = new TextInputBuilder()
+        .setCustomId('query')
+        .setLabel('Song name or YouTube/Spotify link')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder('e.g. Song title or link')
+        .setRequired(true);
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+      return interaction.showModal(modal);
+    }
     default:
       return;
   }
@@ -714,33 +749,92 @@ function parsePosition(text) {
 }
 
 async function handleModal(interaction) {
-  if (interaction.customId !== 'mc:seekModal') return;
-
   const member = interaction.member;
-  const state = music.peek(interaction.guild.id);
+  const state = music.get(interaction.guild.id);
 
-  const control = canControl(state, member);
-  if (!control.allowed) {
-    return interaction.reply({ content: control.reason, flags: MessageFlags.Ephemeral });
-  }
-  if (!state || !state.current) {
-    return interaction.reply({ content: 'Nothing is playing.', flags: MessageFlags.Ephemeral });
-  }
+  if (interaction.customId === 'mc:seekModal') {
+    const control = canControl(state, member);
+    if (!control.allowed) {
+      return interaction.reply({ content: control.reason, flags: MessageFlags.Ephemeral });
+    }
+    if (!state || !state.current) {
+      return interaction.reply({ content: 'Nothing is playing.', flags: MessageFlags.Ephemeral });
+    }
 
-  const seconds = parsePosition(interaction.fields.getTextInputValue('position'));
-  if (seconds === null || seconds < 0) {
-    return interaction.reply({
-      content: 'Invalid position. Use seconds (90) or mm:ss (1:30).',
-      flags: MessageFlags.Ephemeral,
+    const seconds = parsePosition(interaction.fields.getTextInputValue('position'));
+    if (seconds === null || seconds < 0) {
+      return interaction.reply({
+        content: 'Invalid position. Use seconds (90) or mm:ss (1:30).',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // Acknowledge before the (slow) re-stream so we don't miss the 3s deadline.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const target = await state.seek(seconds);
+    return interaction.editReply({
+      content: `⏱️ Seeked to \`${formatTime(target)}\`.`,
     });
   }
 
-  // Acknowledge before the (slow) re-stream so we don't miss the 3s deadline.
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const target = await state.seek(seconds);
-  await interaction.editReply({
-    content: `⏱️ Seeked to \`${formatTime(target)}\`.`,
-  });
+  if (interaction.customId === 'mc:playNowModal' || interaction.customId === 'mc:addQueueModal') {
+    const control = canControl(state, member);
+    if (!control.allowed) {
+      return interaction.reply({ content: control.reason, flags: MessageFlags.Ephemeral });
+    }
+
+    const query = interaction.fields.getTextInputValue('query')?.trim();
+    if (!query) {
+      return interaction.reply({ content: 'Please provide a song name or link.', flags: MessageFlags.Ephemeral });
+    }
+
+    const voiceChannel = member.voice?.channel;
+    if (!state.isConnected()) {
+      if (!voiceChannel) {
+        return interaction.reply({ content: '⚠️ Please join a voice channel first!', flags: MessageFlags.Ephemeral });
+      }
+      state.connect(voiceChannel);
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    try {
+      const { tracks } = await resolveTracks(query, member.user.username);
+      if (!tracks || tracks.length === 0) {
+        return interaction.editReply({ content: '⚠️ Could not find any songs matching that query.' });
+      }
+
+      state.textChannel = interaction.channel;
+      state.starterUser = member.user;
+
+      if (interaction.customId === 'mc:playNowModal') {
+        await state.playTrackNow(tracks[0]);
+        if (tracks.length > 1) {
+          state.enqueue(tracks.slice(1));
+        }
+        return interaction.editReply({
+          content: `⚡ **Playing now:** [${tracks[0].title}](${tracks[0].url})${tracks.length > 1 ? ` (+ ${tracks.length - 1} more queued)` : ''}`,
+        });
+      } else {
+        if (!state.playing) {
+          await state.playTrackNow(tracks[0]);
+          if (tracks.length > 1) {
+            state.enqueue(tracks.slice(1));
+          }
+          return interaction.editReply({
+            content: `▶️ **Playing:** [${tracks[0].title}](${tracks[0].url})${tracks.length > 1 ? ` (+ ${tracks.length - 1} more queued)` : ''}`,
+          });
+        } else {
+          state.enqueue(tracks);
+          return interaction.editReply({
+            content: `➕ **Added to Queue:** [${tracks[0].title}](${tracks[0].url})${tracks.length > 1 ? ` and ${tracks.length - 1} more track(s)` : ''} (Position #${state.queue.length})`,
+          });
+        }
+      }
+    } catch (err) {
+      return interaction.editReply({ content: `⚠️ Failed to play/enqueue: ${err.message}` });
+    }
+  }
 }
 
 // ---------- Release the lock when the priority user leaves the VC ----------

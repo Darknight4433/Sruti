@@ -136,9 +136,15 @@ export function buildPanelComponents({ paused = false, disabled = false, loopMod
 
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId('mc:addlib')
-      .setEmoji('📚')
-      .setLabel('Add to Library')
+      .setCustomId('mc:playnow')
+      .setEmoji('⚡')
+      .setLabel('Play Now')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId('mc:addsong')
+      .setEmoji('➕')
+      .setLabel('Add to Queue')
       .setStyle(ButtonStyle.Success)
       .setDisabled(disabled),
     new ButtonBuilder()
@@ -146,6 +152,12 @@ export function buildPanelComponents({ paused = false, disabled = false, loopMod
       .setEmoji('📜')
       .setLabel('Queue')
       .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('mc:addlib')
+      .setEmoji('📚')
+      .setLabel('Add to Library')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(disabled),
   );
 
   return [row1, row2, row3];
@@ -184,8 +196,8 @@ export function buildQueueView(state, { disabled = false } = {}) {
 
   if (!state || (!state.current && state.queue.length === 0)) {
     embed.setTitle('📭 Queue is empty');
-    embed.setDescription('Use `/play <song>` to add tracks.');
-    return { embeds: [embed], components: [backRow()] };
+    embed.setDescription('Use `/play <song>` or click **Add Song** / **Play Now** below to start music.');
+    return { embeds: [embed], components: [backRow({ disabled })] };
   }
 
   embed.setTitle('🎵 Music Queue');
@@ -225,7 +237,7 @@ export function buildQueueView(state, { disabled = false } = {}) {
     lines.push('───────────────────');
     lines.push(`⏱️ Total queue time: \`${formatTime(totalDuration)}\``);
   } else {
-    lines.push('**Up Next:** Nothing — add more with `/play`');
+    lines.push('**Up Next:** Nothing — add more with `/play` or **Add Song** below');
   }
 
   embed.setDescription(lines.join('\n'));
@@ -245,12 +257,24 @@ export function buildQueueView(state, { disabled = false } = {}) {
       );
     }
   }
-  rows.push(backRow());
+  rows.push(backRow({ disabled }));
   return { embeds: [embed], components: rows };
 }
 
-function backRow() {
+function backRow({ disabled = false } = {}) {
   return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('mc:playnow')
+      .setEmoji('⚡')
+      .setLabel('Play Now')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(disabled),
+    new ButtonBuilder()
+      .setCustomId('mc:addsong')
+      .setEmoji('➕')
+      .setLabel('Add Song')
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(disabled),
     new ButtonBuilder()
       .setCustomId('mc:panel')
       .setEmoji('◀️')

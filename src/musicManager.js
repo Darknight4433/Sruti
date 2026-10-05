@@ -1,3 +1,13 @@
+import dns from 'node:dns';
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch {}
+
+import { setGlobalDispatcher, Agent } from 'undici';
+try {
+  setGlobalDispatcher(new Agent({ connect: { timeout: 30_000 } }));
+} catch {}
+
 import { EventEmitter } from 'node:events';
 import {
   joinVoiceChannel,
@@ -7,7 +17,31 @@ import {
   VoiceConnectionStatus,
   entersState,
   StreamType,
+  VoiceUDPSocket,
 } from '@discordjs/voice';
+
+// Prevent UDP discovery packet drops on Windows
+if (VoiceUDPSocket?.prototype?.performIPDiscovery) {
+  const origPerformIPDiscovery = VoiceUDPSocket.prototype.performIPDiscovery;
+  VoiceUDPSocket.prototype.performIPDiscovery = async function (ssrc) {
+    const discoveryBuffer = Buffer.alloc(74);
+    discoveryBuffer.writeUInt16BE(1, 0);
+    discoveryBuffer.writeUInt16BE(70, 2);
+    discoveryBuffer.writeUInt32BE(ssrc, 4);
+
+    const retryInterval = setInterval(() => {
+      try {
+        this.send(discoveryBuffer);
+      } catch {}
+    }, 400);
+
+    try {
+      return await origPerformIPDiscovery.call(this, ssrc);
+    } finally {
+      clearInterval(retryInterval);
+    }
+  };
+}
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
@@ -198,6 +232,9 @@ class GuildMusicState {
     // Loop mode: 'off' | 'track' | 'queue'.
     this.loopMode = 'off';
 
+    // Track user-initiated pause so connection events do not randomly resume paused songs
+    this.userPaused = false;
+
     // Abort controller and transition locks to prevent race conditions during rapid play/skip
     this.activeAbortController = null;
     this.isTransitioning = false;
@@ -205,7 +242,7 @@ class GuildMusicState {
     this.playId = 0;
 
     this.player.on(AudioPlayerStatus.Idle, () => {
-      if (this.isTransitioning) {
+      if (this.isTransitioning || !this.playing) {
         return;
       }
       this.advance().catch((err) => console.error('advance error:', err));
@@ -220,7 +257,7 @@ class GuildMusicState {
 
     this.player.on('error', (error) => {
       console.error('Audio player error:', error.message);
-      if (this.isTransitioning) {
+      if (this.isTransitioning || !this.playing) {
         return;
       }
       this.advance().catch((err) => console.error('advance error:', err));
@@ -281,7 +318,7 @@ class GuildMusicState {
       if (oldState.status !== newState.status) {
         console.log(`[voice ${this.guildId}] ${oldState.status} -> ${newState.status}`);
         if (newState.status === VoiceConnectionStatus.Ready && this.playing) {
-          if (this.player.state.status === AudioPlayerStatus.AutoPaused || this.player.state.status === AudioPlayerStatus.Paused) {
+          if (this.player.state.status === AudioPlayerStatus.AutoPaused && !this.userPaused) {
             console.log(`[voice ${this.guildId}] Connection is ready, unpausing audio player...`);
             this.player.unpause();
           }
@@ -396,7 +433,7 @@ class GuildMusicState {
         signal: abortController.signal,
       });
 
-      if (abortController.signal.aborted) {
+      if (abortController.signal.aborted || !this.playing) {
         cleanup();
         return;
       }
@@ -411,6 +448,10 @@ class GuildMusicState {
       this.resource = resource;
       this.seekOffset = seekSeconds;
       this.player.play(resource);
+
+      if (this.userPaused) {
+        this.player.pause();
+      }
 
       const onPlaying = () => {
         this.isTransitioning = false;
@@ -563,7 +604,7 @@ class GuildMusicState {
    * - 'off':   just play the next track.
    */
   async advance() {
-    if (this.isAdvancing) return;
+    if (this.isAdvancing || !this.playing) return;
     this.isAdvancing = true;
     try {
       if (this.loopMode === 'track' && this.current) {
@@ -699,20 +740,28 @@ class GuildMusicState {
 
   pause() {
     this.lastActivity = Date.now();
+    this.userPaused = true;
     return this.player.pause();
   }
 
   resume() {
     this.lastActivity = Date.now();
+    this.userPaused = false;
     return this.player.unpause();
   }
 
   isPaused() {
-    return this.player.state.status === AudioPlayerStatus.Paused;
+    return this.player.state.status === AudioPlayerStatus.Paused || this.userPaused;
   }
 
   stop() {
     this.lastActivity = Date.now();
+    this.playing = false;
+    this.userPaused = false;
+    this.isTransitioning = false;
+    this.isAdvancing = false;
+    this.loopMode = 'off';
+
     // Capture the session (track + position + queue) before clearing, so the
     // user can "continue" from where they stopped later.
     if (this.current) {
@@ -736,16 +785,12 @@ class GuildMusicState {
       this.activeAbortController = null;
     }
     if (this.cleanupStream) {
-      this.cleanupStream();
+      try { this.cleanupStream(); } catch {}
       this.cleanupStream = null;
     }
 
     this.queue = [];
-    this.isTransitioning = false;
-    this.isAdvancing = false;
-    this.loopMode = 'off';
-    this.player.stop(true);
-    this.playing = false;
+    try { this.player.stop(true); } catch {}
     this.current = null;
     this.resource = null;
     this.lockHolderId = null;
