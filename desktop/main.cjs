@@ -5,8 +5,11 @@ const { existsSync } = require('node:fs');
 
 const ROOT_DIR = path.resolve(__dirname, '..');
 
-// Look for .env across multiple potential locations (source, packaged, userData)
+// Look for .env across multiple potential locations (userData, workspace, source, packaged)
 const candidateEnvPaths = [
+  path.join(process.env.APPDATA || '', 'Sruti', '.env'),
+  path.join(process.env.APPDATA || '', 'sruti', '.env'),
+  path.join(process.env.USERPROFILE || '', 'Music', 'Scify_Music_Bot-vaishnavi', '.env'),
   path.join(ROOT_DIR, '.env'),
   path.join(process.cwd(), '.env'),
   path.join(path.dirname(process.execPath), '.env'),
@@ -18,7 +21,9 @@ for (const p of candidateEnvPaths) {
   if (existsSync(p)) {
     try {
       require('dotenv').config({ path: p });
-      break;
+      if (process.env.DISCORD_TOKEN && process.env.DISCORD_TOKEN !== 'your-bot-token-here' && process.env.DISCORD_TOKEN.length > 20) {
+        break;
+      }
     } catch {}
   }
 }
@@ -158,8 +163,19 @@ async function startBotProcess() {
     return { success: true, message: 'Bot process is already running.' };
   }
 
+  const token = process.env.DISCORD_TOKEN;
+  if (!token || token === 'your-bot-token-here' || token.length < 20) {
+    botStatus.online = false;
+    botStatus.starting = false;
+    botStatus.noToken = true;
+    sendToRenderer('scify:status', botStatus);
+    sendToRenderer('scify:log', { level: 'warn', text: 'Discord Bot Token is not set. Go to Settings -> Discord Bot Credentials to enter your token.' });
+    return { success: false, error: 'NO_TOKEN' };
+  }
+
   sendToRenderer('scify:log', { level: 'info', text: 'Starting Discord bot engine…' });
   botStatus.starting = true;
+  botStatus.noToken = false;
   sendToRenderer('scify:status', botStatus);
 
   try {
@@ -190,17 +206,9 @@ async function startBotProcess() {
     if (!botStarted) {
       await import('../src/index.js');
       botStarted = true;
-    } else if (scifyCore.client && !scifyCore.client.isReady()) {
+    } else if (scifyCore.client) {
       await scifyCore.client.login(process.env.DISCORD_TOKEN);
     }
-
-    botStatus.online = true;
-    botStatus.starting = false;
-    sendToRenderer('scify:status', {
-      ...botStatus,
-      ...scifyCore.getDiscordStatus(),
-    });
-    sendToRenderer('scify:log', { level: 'info', text: 'Discord bot connected successfully!' });
 
     return { success: true };
   } catch (err) {
@@ -355,8 +363,11 @@ ipcMain.handle('get-env-config', async () => {
 ipcMain.handle('save-env-config', async (event, newConfig) => {
   const { scifyCore } = await import('../src/scifyCore.js');
   const res = scifyCore.saveEnvConfig(newConfig);
-  if (res.success && botProcess) {
-    restartBotProcess();
+  if (res.success) {
+    if (newConfig.DISCORD_TOKEN && newConfig.DISCORD_TOKEN.length > 20) {
+      process.env.DISCORD_TOKEN = newConfig.DISCORD_TOKEN;
+    }
+    await restartBotProcess();
   }
   return res;
 });

@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createRequire } from 'node:module';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { store } from './store.js';
@@ -768,7 +768,20 @@ export class ScifyCore extends EventEmitter {
     ];
 
     try {
-      writeFileSync(this.envPath, lines.join('\n') + '\n', 'utf8');
+      const content = lines.join('\n') + '\n';
+      writeFileSync(this.envPath, content, 'utf8');
+
+      // Also persist into AppData Sruti folder so packaged apps always retain it
+      if (process.env.APPDATA) {
+        for (const folder of ['Sruti', 'sruti']) {
+          const appDataEnvDir = path.join(process.env.APPDATA, folder);
+          if (!existsSync(appDataEnvDir)) {
+            try { mkdirSync(appDataEnvDir, { recursive: true }); } catch {}
+          }
+          try { writeFileSync(path.join(appDataEnvDir, '.env'), content, 'utf8'); } catch {}
+        }
+      }
+
       return { success: true, config: merged };
     } catch (err) {
       console.error('Failed to write .env:', err.message);

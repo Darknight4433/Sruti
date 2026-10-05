@@ -653,21 +653,21 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
               <h3 style="margin-bottom: 0;">Discord Bot Credentials</h3>
               <span id="badgeTokenProtection" class="badge badge-success" style="font-size: 0.72rem; padding: 3px 8px; display: inline-flex; align-items: center; gap: 4px;">
-                🔒 AES-256 Protected
+                🟢 Ready
               </span>
             </div>
-            <p class="card-desc" id="tokenProtectionDesc">Official bot credentials are encrypted in a secure vault. Your token is never exposed in plain text.</p>
+            <p class="card-desc" id="tokenProtectionDesc">Connect Sruti to your Discord servers. Paste your Bot Token from the Discord Developer Portal.</p>
             
             <div class="form-group">
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                 <label style="margin-bottom: 0;">Discord Bot Token</label>
-                <button type="button" class="btn-link" id="btnSwitchCustomToken" style="font-size: 0.76rem; color: var(--accent-color);">Enter Custom Token</button>
+                <a href="https://discord.com/developers/applications" target="_blank" class="btn-link" style="font-size: 0.76rem; color: var(--accent-color); text-decoration: none;">Get Token ↗</a>
               </div>
               <div class="input-password-wrapper">
-                <input type="password" id="cfgDiscordToken" placeholder="Official Encrypted Token Active" readonly>
+                <input type="password" id="cfgDiscordToken" placeholder="Paste your Discord Bot Token here...">
                 <button class="btn-eye" id="btnToggleToken" title="Toggle visibility">👁️</button>
               </div>
-              <span class="sub-label" id="tokenFieldHint" style="font-size: 0.74rem; color: #94a3b8; display: block; margin-top: 4px;">Using official Sruti bot instance.</span>
+              <span class="sub-label" id="tokenFieldHint" style="font-size: 0.74rem; color: #94a3b8; display: block; margin-top: 4px;">Bot token is kept locally on your machine.</span>
             </div>
 
             <div class="form-group">

@@ -1941,29 +1941,21 @@ async function loadBotConfig() {
   const badgeProtection = document.getElementById('badgeTokenProtection');
   const btnSwitch = document.getElementById('btnSwitchCustomToken');
   const fieldHint = document.getElementById('tokenFieldHint');
+  const hasToken = Boolean(cfg.DISCORD_TOKEN && cfg.DISCORD_TOKEN.length > 20);
 
-  if (cfg.isOfficialToken) {
-    if (el.cfgDiscordToken) {
-      el.cfgDiscordToken.value = '••••••••••••••••••••••••••••••••••••••••';
-      el.cfgDiscordToken.readOnly = true;
-    }
-    if (badgeProtection) {
-      badgeProtection.textContent = '🔒 AES-256 Protected';
-      badgeProtection.className = 'badge badge-success';
-    }
-    if (btnSwitch) btnSwitch.textContent = 'Enter Custom Token';
-    if (fieldHint) fieldHint.textContent = 'Using official Sruti bot instance (credentials encrypted in vault).';
-  } else {
-    if (el.cfgDiscordToken) {
-      el.cfgDiscordToken.value = cfg.DISCORD_TOKEN || '';
-      el.cfgDiscordToken.readOnly = false;
-    }
-    if (badgeProtection) {
-      badgeProtection.textContent = 'Custom Bot Token';
-      badgeProtection.className = 'badge badge-primary';
-    }
-    if (btnSwitch) btnSwitch.textContent = 'Restore Official Bot';
-    if (fieldHint) fieldHint.textContent = 'Custom Discord bot token active.';
+  if (el.cfgDiscordToken) {
+    el.cfgDiscordToken.value = cfg.DISCORD_TOKEN || '';
+    el.cfgDiscordToken.readOnly = false;
+  }
+  if (badgeProtection) {
+    badgeProtection.textContent = hasToken ? '🟢 Token Configured' : '⚠️ Token Missing';
+    badgeProtection.className = hasToken ? 'badge badge-success' : 'badge badge-warning';
+  }
+  if (btnSwitch) btnSwitch.style.display = 'none';
+  if (fieldHint) {
+    fieldHint.textContent = hasToken
+      ? 'Bot token loaded. Click Save Configuration to reconnect anytime.'
+      : 'Paste your Discord Bot Token from discord.com/developers/applications and click Save.';
   }
 
   if (el.cfgClientId) el.cfgClientId.value = cfg.DISCORD_CLIENT_ID || '';
@@ -2086,12 +2078,19 @@ function setupSettings() {
 
 function updateBotStatusUI(status) {
   if (!el.botBadge) return;
+  el.botBadge.style.cursor = 'pointer';
+  el.botBadge.onclick = () => switchScreen('settings');
+
   if (status.online) {
     el.botBadge.classList.add('online');
-    el.botBadge.querySelector('.status-text').textContent = `DISCORD: ONLINE (${status.user?.tag || 'Connected'})`;
+    const tag = status.user?.tag || status.user?.username || 'Sruti';
+    el.botBadge.querySelector('.status-text').textContent = `DISCORD: ONLINE (${tag})`;
   } else if (status.starting) {
     el.botBadge.classList.remove('online');
     el.botBadge.querySelector('.status-text').textContent = 'DISCORD: CONNECTING…';
+  } else if (status.noToken) {
+    el.botBadge.classList.remove('online');
+    el.botBadge.querySelector('.status-text').textContent = 'DISCORD: TOKEN NEEDED';
   } else {
     el.botBadge.classList.remove('online');
     el.botBadge.querySelector('.status-text').textContent = 'DISCORD: OFFLINE';
