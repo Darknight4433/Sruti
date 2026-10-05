@@ -172,7 +172,9 @@ function createWindow() {
 function createTray() {
   // Simple tray setup
   try {
-    const iconPath = path.join(__dirname, 'assets', 'icon.png');
+    const iconPath = (process.platform === 'win32' && existsSync(path.join(__dirname, 'assets', 'icon.ico')))
+      ? path.join(__dirname, 'assets', 'icon.ico')
+      : path.join(__dirname, 'assets', 'icon.png');
     if (existsSync(iconPath)) {
       tray = new Tray(iconPath);
     } else {
