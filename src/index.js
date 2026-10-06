@@ -277,6 +277,7 @@ function renderQueueFor(state, viewer) {
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (interaction.isChatInputCommand()) {
+      console.log(`[Interaction] /${interaction.commandName} by ${interaction.user?.tag} in ${interaction.guild?.name || 'DM'}`);
       // Immediate deferral: guarantees Discord's 3-second deadline is NEVER breached
       const isPublic = interaction.commandName === 'play' || interaction.commandName === 'queue';
       if (!interaction.deferred && !interaction.replied) {
@@ -284,8 +285,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       }
       await handleSlash(interaction);
     } else if (interaction.isButton()) {
+      console.log(`[Interaction] Button ${interaction.customId} by ${interaction.user?.tag}`);
       await handleButton(interaction);
     } else if (interaction.isModalSubmit()) {
+      console.log(`[Interaction] Modal ${interaction.customId} by ${interaction.user?.tag}`);
       await handleModal(interaction);
     }
   } catch (err) {

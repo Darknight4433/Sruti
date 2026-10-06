@@ -26,6 +26,23 @@ function logToFile(msg) {
   } catch {}
 }
 
+const origLog = console.log;
+const origWarn = console.warn;
+const origError = console.error;
+
+console.log = (...args) => {
+  origLog(...args);
+  logToFile('[LOG] ' + args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '));
+};
+console.warn = (...args) => {
+  origWarn(...args);
+  logToFile('[WARN] ' + args.map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' '));
+};
+console.error = (...args) => {
+  origError(...args);
+  logToFile('[ERROR] ' + args.map((a) => (typeof a === 'object' ? (a.stack || JSON.stringify(a)) : String(a))).join(' '));
+};
+
 // Helper to resolve src/ modules whether packaged or in development
 function resolveSrc(relPath) {
   const candidates = [
